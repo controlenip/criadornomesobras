@@ -37,6 +37,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Função para resetar os campos manuais
+def limpar_campos_manuais():
+    for i in range(1, 10):
+        chave = f"i{i}"
+        if chave in st.session_state:
+            st.session_state[chave] = ""
+
 def remover_acentos(texto):
     if pd.isna(texto) or texto == "": return ""
     texto = str(texto).upper().strip()
@@ -172,7 +179,7 @@ with c2:
     </table>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
+    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
     
     def criar_linha_input(label, widget_type, key, options=None):
         cA, cB = st.columns([1, 2.5], gap="small")
@@ -194,14 +201,17 @@ with c2:
         man_livre = criar_linha_input("Escrita Livre / Cliente", "text", "i7")
         man_endereco = criar_linha_input("Endereço", "text", "i8")
         man_cc = criar_linha_input("Conta Contrato", "text", "i9")
-
+        
+        # Botão para zerar todos os campos manuais
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
 
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
 
-# Repasses Manuais para a Tabela SGO (Sobrescrevem os dados originais se preenchidos)
+# Repasses Manuais para a Tabela SGO
 if man_mun:
     cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
 if man_livre:
