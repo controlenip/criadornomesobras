@@ -107,18 +107,16 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
-        # 1. Correção da FASE (Força para MO se for 'NÃO ESPECIFICADO')
         fase = str(r_sisco.get('Tipo de Carga', 'MO')).upper() if r_sisco is not None else "MO"
         if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
             
-        # 2. Correção do Tipo de Obra (Idêntico ao comportamento IFERROR + TEXTBEFORE do Excel)
         tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
         if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
         parts = tipo_obra_raw.replace("-", " ").strip().split(" ")
         if len(parts) > 3:
             tipo_obra_sisco = " ".join(parts[:3])
         else:
-            tipo_obra_sisco = "" # Retorna vazio igual a planilha
+            tipo_obra_sisco = ""
             
         data_abertura = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
         if not data_abertura or data_abertura.lower() == 'nan': data_abertura = str(r_notas.get('DATA DA SOLICITAÇÃO', ''))[:10] if r_notas is not None else ""
@@ -195,7 +193,6 @@ with c2:
         man_sol = criar_linha_input("Solicitação", "text", "i6")
         man_livre = criar_linha_input("Escrita Livre", "text", "i7")
 
-
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS (OVERRIDE MANUAL)
 # ==========================================
@@ -217,7 +214,6 @@ if reg_raw:
     elif "NOROESTE" in reg_raw: 
         regional_formatado = "CM01-PINHEIRO"; col_idx = 9; regional_label = "Regional Noroeste"
 
-# 3. Correção da Área Responsável (Garante que cruza da aba Dados como no Excel)
 area_resp = ""
 if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
     dados_pi = df_dados[df_dados['PI'] == pi_ativo]
@@ -263,47 +259,62 @@ pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
 pref_id = man_id.split('-')[0] if man_id else "NS"
 
-for sol in solicitacoes:
-    res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
-    res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
+# --- CORREÇÃO AQUI: Geração de nome manual, MESMO SE A CAIXA DE SOLICITAÇÕES ESTIVER VAZIA ---
+if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol or man_livre):
+    # O usuário não colou nota, mas está digitando no formulário amarelo!
+    pref_mun = man_mun.split('-')[0] if man_mun else "XXX"
+    val_sol_final = man_sol if man_sol else "0000000000"
+    val_livre_final = man_livre if man_livre else "NOME"
     
-    if not res_sol_sisco.empty or not res_sol_notas.empty:
-        r_sol_sisco = res_sol_sisco.iloc[0] if not res_sol_sisco.empty else None
-        r_sol_notas = res_sol_notas.iloc[0] if not res_sol_notas.empty else None
+    raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
+    clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
+    obra_relampago_formatada = clean_name[:34].upper()
+    
+    nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
+    descricoes_html += f'<div class="desc-row">CRIADO MANUALMENTE</div>\n'
+else:
+    # Lógica normal iterando pelas notas coladas
+    for sol in solicitacoes:
+        res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
+        res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
         
-        cc_sol = str(r_sol_sisco.get('CC', '')) if r_sol_sisco is not None else ""
-        if not cc_sol or cc_sol.lower() == 'nan': cc_sol = str(r_sol_notas.get('CONTA CONTRATO', '')) if r_sol_notas is not None else ""
-        cc_sol = cc_sol.replace('.0', '')
-        
-        cli_sol = str(r_sol_sisco.get('Nome', '')) if r_sol_sisco is not None else ""
-        if not cli_sol or cli_sol.lower() == 'nan': cli_sol = str(r_sol_notas.get('NOME DO SOLICITANTE', '')) if r_sol_notas is not None else ""
-        cli_sol = cli_sol.upper()
-        
-        cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
-        if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
-        
-        pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
-        val_sol_final = man_sol if man_sol else sol
-        val_livre_final = man_livre if man_livre else cli_sol
-        
-        desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
-        
-        # 4. Limita o nome da Obra exatamente a 34 caracteres como na fórmula `=LEFT(..., 34)`
-        raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
-        clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
-        nome_str = clean_name[:34]
-        
-        if sol == solicitacoes[0]:
-            obra_relampago_formatada = nome_str
-    else:
-        desc_str = f"{sol} - NÃO ENCONTRADO"
-        nome_str = f"{sol} - NÃO ENCONTRADO"
-        if sol == solicitacoes[0]: obra_relampago_formatada = nome_str
-        
-    descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
-    nomes_obras_html += f'<div class="desc-row">{nome_str}</div>\n'
+        if not res_sol_sisco.empty or not res_sol_notas.empty:
+            r_sol_sisco = res_sol_sisco.iloc[0] if not res_sol_sisco.empty else None
+            r_sol_notas = res_sol_notas.iloc[0] if not res_sol_notas.empty else None
+            
+            cc_sol = str(r_sol_sisco.get('CC', '')) if r_sol_sisco is not None else ""
+            if not cc_sol or cc_sol.lower() == 'nan': cc_sol = str(r_sol_notas.get('CONTA CONTRATO', '')) if r_sol_notas is not None else ""
+            cc_sol = cc_sol.replace('.0', '')
+            
+            cli_sol = str(r_sol_sisco.get('Nome', '')) if r_sol_sisco is not None else ""
+            if not cli_sol or cli_sol.lower() == 'nan': cli_sol = str(r_sol_notas.get('NOME DO SOLICITANTE', '')) if r_sol_notas is not None else ""
+            cli_sol = cli_sol.upper()
+            
+            cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
+            if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
+            
+            pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
+            val_sol_final = man_sol if man_sol else sol
+            val_livre_final = man_livre if man_livre else cli_sol.replace(" ", "-")[:15]
+            
+            desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
+            
+            raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
+            clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
+            nome_str = clean_name[:34].upper()
+            
+            if sol == solicitacoes[0]:
+                obra_relampago_formatada = nome_str
+        else:
+            desc_str = f"{sol} - NÃO ENCONTRADO"
+            nome_str = f"{sol} - NÃO ENCONTRADO"
+            if sol == solicitacoes[0]: obra_relampago_formatada = nome_str
+            
+        descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
+        nomes_obras_html += f'<div class="desc-row">{nome_str}</div>\n'
 
-linhas_restantes = 25 - len(solicitacoes)
+# Adiciona linhas em branco para manter a estética
+linhas_restantes = 25 - max(len(solicitacoes), 1 if obra_relampago_formatada else 0)
 for _ in range(max(linhas_restantes, 0)):
     descricoes_html += '<div class="desc-row"></div>\n'
     nomes_obras_html += '<div class="desc-row"></div>\n'
