@@ -3,7 +3,7 @@ import pandas as pd
 import unicodedata
 
 # ==========================================
-# 1. CONFIGURAÇÕES DA PÁGINA E CSS
+# 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide")
 
@@ -199,7 +199,14 @@ with c2:
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
 
-# NOVIDADE AQUI: Se a caixa de município manual foi preenchida, o sistema descobre a Regional por ela!
+# Repassa Município Manual para a Tabela SGO
+if man_mun and not cidade_auto:
+    cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
+    
+# Repassa Cliente Manual para a Tabela SGO
+if man_livre and not cliente_auto:
+    cliente_auto = man_livre.upper()
+
 if man_mun and not df_dados.empty and 'SIGLA-MUNICIPIO' in df_dados.columns:
     dados_mun = df_dados[df_dados['SIGLA-MUNICIPIO'] == man_mun]
     if not dados_mun.empty:
@@ -257,7 +264,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
             if tecnico.lower() == 'nan': tecnico = ""
 
 if not area_resp: area_resp = ""
-
 
 # ==========================================
 # 5. GERADOR EM MASSA DOS NOMES
