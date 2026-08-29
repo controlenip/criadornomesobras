@@ -7,7 +7,7 @@ import base64
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
-# initial_sidebar_state="expanded" para a barra iniciar aberta (conforme seu código original)
+# Adicionado initial_sidebar_state="expanded" para a barra iniciar aberta
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -121,6 +121,13 @@ with c1:
     # Estado para rastrear o número de campos
     if 'num_notas' not in st.session_state:
         st.session_state.num_notas = 1
+
+    # Lógica Inteligente de Reset: Se "Obra 1" for apagada, reseta tudo para 1 campo e limpa a memória das extras
+    if 'nota_input_0' in st.session_state and st.session_state['nota_input_0'].strip() == "":
+        st.session_state.num_notas = 1
+        for k in list(st.session_state.keys()):
+            if k.startswith("nota_input_") and k != "nota_input_0":
+                del st.session_state[k]
 
     solicitacoes = []
     
