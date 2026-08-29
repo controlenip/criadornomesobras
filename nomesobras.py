@@ -16,9 +16,10 @@ st.markdown("""
     .eh-dark { background-color: #00b050; color: white; font-weight: 900; padding: 4px; border: 3px solid black; border-bottom: 0px; font-size: 13px; text-transform: uppercase; font-family: 'Arial Black', sans-serif;}
     
     .et { width: 100%; border-collapse: collapse; border: 3px solid black; background-color: white; margin-bottom: 15px; }
-    .et td { border: 2px solid black; padding: 2px 6px; font-weight: bold; font-family: Calibri, Arial, sans-serif; font-size: 13px; height: 24px; vertical-align: middle; }
+    .et td { border: 2px solid black; padding: 2px 6px; font-weight: bold; font-family: Calibri, Arial, sans-serif; font-size: 13px; height: 26px; vertical-align: middle; }
     
     .lbl { width: 35%; background-color: #ffffff; color: black; }
+    .lbl-y { width: 35%; background-color: #ffeb9c; color: black; }
     .val { width: 65%; background-color: #ffffff; color: black; text-transform: uppercase; }
     
     .text-blue { color: #0070c0 !important; }
@@ -28,9 +29,6 @@ st.markdown("""
     .obs-box { background-color: #595959; color: white; border: 3px solid black; padding: 8px; font-family: Calibri, Arial, sans-serif; font-size: 12px; font-weight: bold; font-style: italic; min-height: 250px; white-space: pre-wrap; line-height: 1.2; overflow-y: auto;}
     .desc-row { border: 2px solid black; height: 22px; width: 100%; margin-bottom: 2px; padding: 2px 6px; font-weight: 900; font-family: 'Arial Black', sans-serif; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: black; line-height: 14px;}
     
-    /* Força os inputs interativos a terem borda preta grossa imitando Excel */
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div { border: 2px solid black; border-radius: 0px; min-height: 30px; }
-    div[data-testid="stTextInput"] input { border: 2px solid black; border-radius: 0px; height: 30px; font-weight: bold; }
     .stTextArea textarea { border: 3px solid black !important; border-radius: 0px !important; font-weight: bold; font-family: monospace; }
 </style>
 """, unsafe_allow_html=True)
@@ -62,8 +60,6 @@ def carregar_dados(file):
 arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
 df_sisco, df_notas, df_dados = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-# Listas de Opções para os Menus Suspensos (Puxados da aba Dados)
 lista_tipos_obra, lista_pi, lista_mun, lista_id = [], [], [], []
 
 if arquivo_bd:
@@ -76,7 +72,6 @@ if arquivo_bd:
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
         if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted(df_dados['ID DO NUMERO'].dropna().unique().tolist())
 
-# Layout: 4 Colunas simulando o Excel
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 with c1:
@@ -85,17 +80,12 @@ with c1:
     
 solicitacoes = [s.strip() for s in sols_input.split('\n') if s.strip()]
 
-# Variáveis Padrão corrigidas (reg_raw adicionada aqui)
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, regional_formatado, obs = "", "", "", "", "", ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto, reg_raw = "", "", "", ""
-obra_relampago_formatada = ""
-descricoes_html = ""
-nomes_obras_html = ""
-obra_especial = "Normal"
+obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
 
-# Extração dos dados automáticos da primeira nota colada
 if solicitacoes and (not df_sisco.empty or not df_notas.empty):
     solicitacao_principal = solicitacoes[0]
     resultado_sisco = df_sisco[df_sisco['Nota CCS'] == solicitacao_principal] if not df_sisco.empty else pd.DataFrame()
@@ -159,7 +149,7 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
 
 # ==========================================
-# 3. INTERFACE INTERATIVA: DADOS E CAIXA MANUAL
+# 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
 # ==========================================
 with c2:
     st.markdown(f"""
@@ -176,32 +166,22 @@ with c2:
     </table>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="eh-yellow" style="margin-bottom: 5px;">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
+    # Renderização da Caixa Amarela
+    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
     
-    # --- WIDGETS INTERATIVOS (A MÁGICA DA PLANILHA) ---
-    c2_a, c2_b = st.columns([1, 2.5])
-    with c2_a:
-        st.markdown('<div style="background-color: #ffeb9c; border: 2px solid black; border-bottom:0px; padding: 4px; font-weight: bold; font-size: 13px; height: 34px;">Obra Especial ?</div>', unsafe_allow_html=True)
-        st.markdown('<div style="background-color: #ffeb9c; border: 2px solid black; border-bottom:0px; padding: 4px; font-weight: bold; font-size: 13px; height: 34px;">Tipo de Obra</div>', unsafe_allow_html=True)
-        st.markdown('<div style="background-color: #ffeb9c; border: 2px solid black; border-bottom:0px; padding: 4px; font-weight: bold; font-size: 13px; height: 34px;">PI</div>', unsafe_allow_html=True)
-        st.markdown('<div style="background-color: #ffeb9c; border: 2px solid black; border-bottom:0px; padding: 4px; font-weight: bold; font-size: 13px; height: 34px;">Municipio</div>', unsafe_allow_html=True)
-        st.markdown('<div style="background-color: #ffeb9c; border: 2px solid black; border-bottom:0px; padding: 4px; font-weight: bold; font-size: 13px; height: 34px;">ID do Numero</div>', unsafe_allow_html=True)
-        st.markdown('<div style="background-color: #ffeb9c; border: 2px solid black; border-bottom:0px; padding: 4px; font-weight: bold; font-size: 13px; height: 34px;">Solicitação</div>', unsafe_allow_html=True)
-        st.markdown('<div style="background-color: #ffeb9c; border: 2px solid black; padding: 4px; font-weight: bold; font-size: 13px; height: 34px;">Escrita Livre</div>', unsafe_allow_html=True)
-    with c2_b:
-        man_especial = st.selectbox("obra", ["Normal", "Sim"], label_visibility="collapsed")
-        man_tipo_obra = st.selectbox("tipo", [""] + lista_tipos_obra, label_visibility="collapsed")
-        man_pi = st.selectbox("pi", [""] + lista_pi, label_visibility="collapsed")
-        man_mun = st.selectbox("mun", [""] + lista_mun, label_visibility="collapsed")
-        man_id = st.selectbox("id", [""] + lista_id, label_visibility="collapsed")
-        man_sol = st.text_input("sol", label_visibility="collapsed")
-        man_livre = st.text_input("livre", label_visibility="collapsed")
-
+    # Formulário nativo do Streamlit para colher os dados
+    with st.container():
+        man_especial = st.selectbox("Obra Especial ?", ["Normal", "Sim"], label_visibility="collapsed")
+        man_tipo_obra = st.selectbox("Tipo de Obra", [""] + lista_tipos_obra, label_visibility="collapsed")
+        man_pi = st.selectbox("PI", [""] + lista_pi, label_visibility="collapsed")
+        man_mun = st.selectbox("Municipio", [""] + lista_mun, label_visibility="collapsed")
+        man_id = st.selectbox("ID do Numero", [""] + lista_id, label_visibility="collapsed")
+        man_sol = st.text_input("Solicitação", label_visibility="collapsed")
+        man_livre = st.text_input("Escrita Livre", label_visibility="collapsed")
 
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS (OVERRIDE MANUAL)
 # ==========================================
-# Determina qual PI será usado: o Manual (se preenchido) ou o Automático
 pi_ativo = man_pi if man_pi else pi_auto
 
 col_idx = 4
@@ -221,7 +201,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
     dados_pi = df_dados[df_dados['PI'] == pi_ativo]
     if not dados_pi.empty:
         r_dados = dados_pi.iloc[0]
-        
         tipo_nota_parceiro = str(r_dados.get('Tipo de NS|Parceiro', ''))
         responsavel_obra = str(r_dados.get('Resp. Obra', ''))
         data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({str(r_dados.get('Qtd dias', ''))} DIAS)"
@@ -297,7 +276,7 @@ for _ in range(max(linhas_restantes, 0)):
 # ==========================================
 with c3:
     lbl_obra_estilo = 'class="lbl"' if not man_tipo_obra and not man_pi and not man_livre else 'class="lbl text-red" style="background-color: #ffeb9c;"'
-    val_obra_estilo = 'class="val text-green"' if not man_tipo_obra and not man_pi and not man_livre else 'class="val text-red" style="background-color: #ffeb9c;"'
+    val_obra_estilo = 'class="val text-green"' if not man_tipo_obra and not man_pi and not man_livre else 'class="val text-red" style="background-color: #ffeb9c; font-style: italic;"'
     lbl_obra_texto = "⚡ Obra Relampago ⚡" if not man_tipo_obra and not man_pi and not man_livre else "🚧 Nome da Obra 🚧"
     
     st.markdown(f"""
