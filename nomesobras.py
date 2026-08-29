@@ -7,7 +7,7 @@ import base64
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
-# Adicionado initial_sidebar_state="expanded" para a barra iniciar aberta
+# initial_sidebar_state="expanded" para a barra iniciar aberta (conforme seu código original)
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -47,6 +47,10 @@ def limpar_campos_manuais():
         chave = f"i{i}"
         if chave in st.session_state:
             st.session_state[chave] = ""
+
+# Função para adicionar novo campo de nota dinamicamente
+def add_nota():
+    st.session_state.num_notas += 1
 
 def remover_acentos(texto):
     if pd.isna(texto) or texto == "": return ""
@@ -103,11 +107,30 @@ if arquivo_bd:
 
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
+# ==========================================
+# COLUNA 1 - SOLICITAÇÕES INDIVIDUAIS
+# ==========================================
 with c1:
     st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
-    sols_input = st.text_area("", height=600, placeholder="Cole as notas aqui\n(Uma por linha)", label_visibility="collapsed")
     
-solicitacoes = [s.strip() for s in sols_input.split('\n') if s.strip()]
+    # Caixa de Notas Associadas (Padrão: Marcada)
+    st.markdown("<div style='padding: 8px 0px;'>", unsafe_allow_html=True)
+    notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Estado para rastrear o número de campos
+    if 'num_notas' not in st.session_state:
+        st.session_state.num_notas = 1
+
+    solicitacoes = []
+    
+    # Renderiza os campos dinamicamente
+    for i in range(st.session_state.num_notas):
+        val = st.text_input(f"Obra {i+1}", key=f"nota_input_{i}", placeholder=f"Obra {i+1}...", label_visibility="collapsed")
+        if val and val.strip():
+            solicitacoes.append(val.strip())
+            
+    st.button("➕ Adicionar Obra", on_click=add_nota, use_container_width=True)
 
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
@@ -321,7 +344,7 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
     descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
 else:
-    for sol in solicitacoes:
+    for idx, sol in enumerate(solicitacoes):
         res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
         res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
         
@@ -354,15 +377,21 @@ else:
             clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
             nome_str = clean_name[:34].upper()
             
-            if sol == solicitacoes[0]:
+            if idx == 0:
                 obra_relampago_formatada = nome_str
         else:
             desc_str = f"{sol} - NÃO ENCONTRADO"
             nome_str = f"{sol} - NÃO ENCONTRADO"
-            if sol == solicitacoes[0]: obra_relampago_formatada = nome_str
+            if idx == 0:
+                obra_relampago_formatada = nome_str
             
         descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
-        nomes_obras_html += f'<div class="desc-row">{nome_str}</div>\n'
+        
+        # Lógica de NOTAS ASSOCIADAS: Apenas a primeira ganha nome SGO, as outras ficam vazias para alinhamento
+        if notas_associadas and idx > 0:
+            nomes_obras_html += f'<div class="desc-row">&nbsp;</div>\n'
+        else:
+            nomes_obras_html += f'<div class="desc-row">{nome_str}</div>\n'
 
 linhas_restantes = 25 - max(len(solicitacoes), 1 if obra_relampago_formatada else 0)
 for _ in range(max(linhas_restantes, 0)):
