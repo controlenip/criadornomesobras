@@ -27,7 +27,12 @@ st.markdown("""
     .text-green { color: #00b050 !important; }
     
     .obs-box { background-color: #595959; color: white; border: 3px solid black; padding: 8px; font-family: Calibri, Arial, sans-serif; font-size: 12px; font-weight: bold; font-style: italic; min-height: 250px; white-space: pre-wrap; line-height: 1.2; overflow-y: auto;}
-    .desc-box { background-color: white; color: black; border: 3px solid black; padding: 4px 6px; font-family: 'Arial Black', sans-serif; font-size: 13px; font-weight: 900; text-transform: uppercase; margin-bottom: 15px; min-height: 24px;}
+    
+    /* Estilo para simular as linhas da Coluna 4 */
+    .desc-row { border: 2px solid black; height: 22px; width: 100%; margin-bottom: 2px; padding: 2px 6px; font-weight: 900; font-family: 'Arial Black', sans-serif; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: black; line-height: 14px;}
+    
+    /* Força a área de texto a ter borda preta */
+    .stTextArea textarea { border: 3px solid black !important; border-radius: 0px !important; font-weight: bold; font-family: monospace; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -57,12 +62,14 @@ def carregar_dados(file):
 # ==========================================
 arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
-# Variáveis em branco por padrão (Para mostrar a tela vazia como no Excel)
+# Variáveis em branco por padrão
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
 cidade, cliente, endereco, area_resp, regional_formatado, obs = "", "", "", "", "", ""
 obra_relampago, pi, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", "", ""
-responsavel_obra, descricao_sgo, tipo_nota_parceiro, valor_previsto = "", "", "", ""
+responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
 obra_especial = "Normal"
+descricoes_html = ""
+nomes_obras_html = ""
 
 df_sisco, df_notas, df_dados = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
@@ -71,20 +78,21 @@ if arquivo_bd:
         df_sisco, df_notas, df_dados = carregar_dados(arquivo_bd)
 
 # Layout: 4 Colunas simulando o Excel
-c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 1.5])
+c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 with c1:
-    st.markdown('<div class="eh">🎯 SOLICITAÇÃO</div>', unsafe_allow_html=True)
-    solicitacao = st.text_input("", placeholder="Digite a Nota", label_visibility="collapsed")
+    st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
+    sols_input = st.text_area("", height=600, placeholder="Cole as notas aqui\n(Uma por linha)", label_visibility="collapsed")
     
-    for _ in range(25):
-        st.markdown('<div style="border: 1px solid #ccc; height: 23px; width: 100%;"></div>', unsafe_allow_html=True)
+solicitacoes = [s.strip() for s in sols_input.split('\n') if s.strip()]
 
 # Lógica de preenchimento caso digite algo
-if solicitacao and not df_sisco.empty:
-    solicitacao = solicitacao.strip()
-    resultado = df_sisco[df_sisco['Nota CCS'] == solicitacao]
-    resultado_notas = df_notas[df_notas['PROTOCOLO'] == solicitacao] if not df_notas.empty else pd.DataFrame()
+if solicitacoes and not df_sisco.empty:
+    
+    # A primeira solicitação dita os dados do Painel Principal (Gerente, Executivo, etc)
+    solicitacao_principal = solicitacoes[0]
+    resultado = df_sisco[df_sisco['Nota CCS'] == solicitacao_principal]
+    resultado_notas = df_notas[df_notas['PROTOCOLO'] == solicitacao_principal] if not df_notas.empty else pd.DataFrame()
     
     if not resultado.empty:
         row = resultado.iloc[0]
@@ -111,7 +119,6 @@ if solicitacao and not df_sisco.empty:
         cliente = str(row.get('Nome', '')).upper()
         if cliente.lower() == 'nan': cliente = ""
             
-        # Endereço busca no NotasSisgb primeiro, fallback Sisco
         if row_notas is not None and pd.notna(row_notas.get('ENDEREÇO')):
             endereco = str(row_notas.get('ENDEREÇO'))
         else:
@@ -120,14 +127,13 @@ if solicitacao and not df_sisco.empty:
             
         area_resp = str(row.get('Descrição', 'EXPANSÃO')).upper()
         
-        # PI: Busca NotasSisgb ('TIPO LIGAÇÃO'), fallback Sisco ('Tipo de Projeto(PI)')
         if row_notas is not None and pd.notna(row_notas.get('TIPO LIGAÇÃO')):
             pi = str(row_notas.get('TIPO LIGAÇÃO'))
         else:
             pi = str(row.get('Tipo de Projeto(PI)', ''))
         if pi.lower() == 'nan': pi = ""
             
-        # Cruzamento com a aba DADOS usando o PI
+        # Cruzamento com a aba DADOS
         if pi and not df_dados.empty and 'PI' in df_dados.columns:
             dados_pi = df_dados[df_dados['PI'] == pi]
             if not dados_pi.empty:
@@ -136,15 +142,15 @@ if solicitacao and not df_sisco.empty:
                 responsavel_obra = str(r_dados.get('Resp. Obra', ''))
                 data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({str(r_dados.get('Qtd dias', ''))} DIAS)"
                 
-                # Se for certos PIs, valor é 7000, senão 30000
+                # Multiplica pela quantidade de solicitações preenchidas!
                 if pi in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"]:
-                    valor_previsto = "R$ 7.000,00"
+                    total_val = 7000 * len(solicitacoes)
                 else:
-                    valor_previsto = "R$ 30.000,00"
+                    total_val = 30000 * len(solicitacoes)
+                valor_previsto = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         
-        # Lógica de Regional -> Cruza para achar o Gerente/Executivo/Empresa corretos
         reg_raw = str(row.get('Regional', '')).upper()
-        col_idx = 4 # Index das colunas de Regional na aba Dados (Norte, Noroeste, Sul, Centro, Leste)
+        col_idx = 4
         regional_formatado = "CM04-IMPERATRIZ"
         
         if "SUL" in reg_raw: 
@@ -158,15 +164,14 @@ if solicitacao and not df_sisco.empty:
         elif "NOROESTE" in reg_raw: 
             regional_formatado = "CM01-PINHEIRO"; col_idx = 9
 
-        # Resgata equipe da regional respectiva baseada no PI
         if pi and not df_dados.empty:
             dados_pi = df_dados[df_dados['PI'] == pi]
             if not dados_pi.empty:
-                gerente = str(dados_pi.iloc[0, col_idx]) # Gerente da regional correspondente
-                executivo = str(dados_pi.iloc[0, col_idx + 1]) # Executivo
-                empresa = str(dados_pi.iloc[0, col_idx + 2]) # Empresa
-                contrato = str(dados_pi.iloc[0, col_idx + 3]) # Contrato
-                tecnico = str(dados_pi.iloc[0, col_idx + 4]) # Técnico
+                gerente = str(dados_pi.iloc[0, col_idx])
+                executivo = str(dados_pi.iloc[0, col_idx + 1])
+                empresa = str(dados_pi.iloc[0, col_idx + 2])
+                contrato = str(dados_pi.iloc[0, col_idx + 3])
+                tecnico = str(dados_pi.iloc[0, col_idx + 4])
                 
                 if gerente.lower() == 'nan': gerente = ""
                 if executivo.lower() == 'nan': executivo = ""
@@ -174,16 +179,49 @@ if solicitacao and not df_sisco.empty:
                 if contrato.lower() == 'nan': contrato = ""
                 if tecnico.lower() == 'nan': tecnico = ""
         
-        # Monta nomes
         cliente_curto = cliente.replace(" ", "-")[:15]
         sigla_mun = cidade[:3] if cidade else "XXX"
-        descricao_sgo = f"{solicitacao}-{cliente}, CC-{cc}."
-        obra_relampago = f"CT-UNR-{sigla_mun}-NS-{solicitacao}-{cliente_curto}"
+        obra_relampago = f"CT-UNR-{sigla_mun}-NS-{solicitacao_principal}-{cliente_curto}"
         
         obs = str(row.get('Obs(última obs)', ''))
         if obs.lower() == 'nan': obs = ""
+        
+        # =========================================================
+        # GERAÇÃO EM MASSA (DESCRIÇÕES E NOMES PARA TODAS AS NOTAS)
+        # =========================================================
+        for sol in solicitacoes:
+            res_sol = df_sisco[df_sisco['Nota CCS'] == sol]
+            if not res_sol.empty:
+                r_sol = res_sol.iloc[0]
+                cc_sol = str(r_sol.get('CC', '')).replace('.0', '')
+                if cc_sol.lower() == 'nan': cc_sol = ""
+                
+                cli_sol = str(r_sol.get('Nome', '')).upper()
+                if cli_sol.lower() == 'nan': cli_sol = ""
+                
+                cid_sol = remover_acentos(str(r_sol.get('Município', '')))
+                sigla_mun_sol = cid_sol[:3] if cid_sol else "XXX"
+                cli_curto_sol = cli_sol.replace(" ", "-")[:15]
+                
+                pi_str = pi if pi else "UNR"
+                
+                desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
+                nome_str = f"CT-{pi_str}-{sigla_mun_sol}-NS-{sol}-{cli_curto_sol}"
+            else:
+                desc_str = f"{sol} - NÃO ENCONTRADO"
+                nome_str = f"{sol} - NÃO ENCONTRADO"
+                
+            descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
+            nomes_obras_html += f'<div class="desc-row">{nome_str}</div>\n'
+            
     else:
-        st.toast("❌ Nota não encontrada no Sisco.")
+        st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
+
+# Adiciona linhas vazias para manter o layout bonito mesmo com poucas notas
+linhas_restantes = 25 - len(solicitacoes)
+for _ in range(max(linhas_restantes, 0)):
+    descricoes_html += '<div class="desc-row"></div>\n'
+    nomes_obras_html += '<div class="desc-row"></div>\n'
 
 # ==========================================
 # 3. RENDERIZAÇÃO DAS COLUNAS FIXAS HTML
@@ -245,10 +283,8 @@ with c3:
     """, unsafe_allow_html=True)
 
 with c4:
-    st.markdown(f"""
-    <div class="eh">🖋 DESCRIÇÃO SGO 🖋</div>
-    <div class="desc-box">{descricao_sgo}</div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="eh">🖋 DESCRIÇÕES SGO 🖋</div>', unsafe_allow_html=True)
+    st.markdown(descricoes_html, unsafe_allow_html=True)
     
-    for _ in range(35):
-        st.markdown('<div style="border: 2px solid black; height: 18px; width: 100%; margin-bottom: 2px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="eh" style="margin-top: 15px;">🚧 NOMES DAS OBRAS 🚧</div>', unsafe_allow_html=True)
+    st.markdown(nomes_obras_html, unsafe_allow_html=True)
