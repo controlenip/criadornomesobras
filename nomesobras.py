@@ -3,39 +3,32 @@ import pandas as pd
 import unicodedata
 
 # ==========================================
-# 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
+# 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO)
 # ==========================================
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide")
 
 st.markdown("""
 <style>
     [data-testid="stHeader"] { display: none !important; }
-    
-    /* Configuração Global de Fontes Menores */
     html, body, [class*="css"] { font-size: 12px !important; }
     
-    /* Cabeçalhos Modernos */
     .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
     .eh-yellow { background-color: #fef08a; color: #991b1b; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0; margin-bottom: 5px;}
     .eh-dark { background-color: #047857; color: white; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; border-radius: 4px 4px 0 0;}
     
-    /* Tabelas HTML */
     .et { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background-color: white; margin-bottom: 15px; border-radius: 0 0 4px 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);}
     .et td { border: 1px solid #e2e8f0; padding: 4px 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; height: 26px; vertical-align: middle; }
     
     .lbl { width: 38%; background-color: #f8fafc; color: #475569; font-weight: 600; white-space: nowrap;}
     .val { width: 62%; background-color: #ffffff; color: #0f172a; font-weight: 700; text-transform: uppercase; }
     
-    /* Cores de Texto Profissionais */
     .text-blue { color: #2563eb !important; }
     .text-red { color: #dc2626 !important; }
     .text-green { color: #059669 !important; }
     
-    /* Caixas de Texto (Observações e Descrições) */
     .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 200px; white-space: pre-wrap; line-height: 1.4; overflow-y: auto; border-radius: 0 0 4px 4px;}
     .desc-row { border: 1px solid #cbd5e1; height: 26px; width: 100%; margin-bottom: 4px; padding: 4px 8px; font-weight: 600; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
     
-    /* Formatação dos Campos Interativos */
     .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
     div[data-baseweb="select"] > div { border: 1px solid #cbd5e1; border-radius: 4px; min-height: 35px !important; height: 35px !important; font-size: 11px; background-color: white;}
     input[data-testid="stTextInput"] { border: 1px solid #cbd5e1; border-radius: 4px; height: 35px !important; min-height: 35px !important; font-size: 11px; font-weight: bold; background-color: white;}
@@ -91,15 +84,12 @@ with c1:
     
 solicitacoes = [s.strip() for s in sols_input.split('\n') if s.strip()]
 
-# Variáveis Padrão 100% vazias
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
 obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
-obra_especial = "Normal"
 
-# Lógica principal de extração de dados
 if solicitacoes and (not df_sisco.empty or not df_notas.empty):
     solicitacao_principal = solicitacoes[0]
     resultado_sisco = df_sisco[df_sisco['Nota CCS'] == solicitacao_principal] if not df_sisco.empty else pd.DataFrame()
@@ -117,12 +107,18 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
+        # 1. Correção da FASE (Força para MO se for 'NÃO ESPECIFICADO')
         fase = str(r_sisco.get('Tipo de Carga', 'MO')).upper() if r_sisco is not None else "MO"
-        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase: fase = "MO"
+        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
             
+        # 2. Correção do Tipo de Obra (Idêntico ao comportamento IFERROR + TEXTBEFORE do Excel)
         tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
         if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
-        tipo_obra_sisco = " ".join(tipo_obra_raw.replace("-", " ").split()[:3])
+        parts = tipo_obra_raw.replace("-", " ").strip().split(" ")
+        if len(parts) > 3:
+            tipo_obra_sisco = " ".join(parts[:3])
+        else:
+            tipo_obra_sisco = "" # Retorna vazio igual a planilha
             
         data_abertura = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
         if not data_abertura or data_abertura.lower() == 'nan': data_abertura = str(r_notas.get('DATA DA SOLICITAÇÃO', ''))[:10] if r_notas is not None else ""
@@ -159,7 +155,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if obs.lower() == 'nan': obs = ""
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
-
 
 # ==========================================
 # 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
@@ -206,33 +201,23 @@ with c2:
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
 
-# Definição segura das regionais que inicia VAZIA!
 regional_formatado = ""
 regional_label = "Regional"
 col_idx = 0
 
 if reg_raw:
     if "SUL" in reg_raw: 
-        regional_formatado = "CM04-IMPERATRIZ"
-        col_idx = 14
-        regional_label = "Regional Sul"
+        regional_formatado = "CM04-IMPERATRIZ"; col_idx = 14; regional_label = "Regional Sul"
     elif "CENTRO" in reg_raw: 
-        regional_formatado = "CM03-BACABAL"
-        col_idx = 19
-        regional_label = "Regional Centro"
+        regional_formatado = "CM03-BACABAL"; col_idx = 19; regional_label = "Regional Centro"
     elif "LESTE" in reg_raw: 
-        regional_formatado = "CM02-TIMON"
-        col_idx = 24
-        regional_label = "Regional Leste"
+        regional_formatado = "CM02-TIMON"; col_idx = 24; regional_label = "Regional Leste"
     elif "NORTE" in reg_raw: 
-        regional_formatado = "CM01-SAO LUIS"
-        col_idx = 4
-        regional_label = "Regional Norte"
+        regional_formatado = "CM01-SAO LUIS"; col_idx = 4; regional_label = "Regional Norte"
     elif "NOROESTE" in reg_raw: 
-        regional_formatado = "CM01-PINHEIRO"
-        col_idx = 9
-        regional_label = "Regional Noroeste"
+        regional_formatado = "CM01-PINHEIRO"; col_idx = 9; regional_label = "Regional Noroeste"
 
+# 3. Correção da Área Responsável (Garante que cruza da aba Dados como no Excel)
 area_resp = ""
 if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
     dados_pi = df_dados[df_dados['PI'] == pi_ativo]
@@ -255,7 +240,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
             total_val = 30000 * (len(solicitacoes) if solicitacoes else 1)
         valor_previsto = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         
-        # Só preenche equipe (gerente, etc) se houver uma região identificada
         if col_idx > 0:
             gerente = str(dados_pi.iloc[0, col_idx])
             executivo = str(dados_pi.iloc[0, col_idx + 1])
@@ -300,10 +284,14 @@ for sol in solicitacoes:
         
         pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
         val_sol_final = man_sol if man_sol else sol
-        val_livre_final = man_livre if man_livre else cli_sol.replace(" ", "-")[:15]
+        val_livre_final = man_livre if man_livre else cli_sol
         
         desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
-        nome_str = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
+        
+        # 4. Limita o nome da Obra exatamente a 34 caracteres como na fórmula `=LEFT(..., 34)`
+        raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
+        clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
+        nome_str = clean_name[:34]
         
         if sol == solicitacoes[0]:
             obra_relampago_formatada = nome_str
