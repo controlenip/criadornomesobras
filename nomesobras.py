@@ -121,6 +121,7 @@ if arquivo_bd:
             contrato = "4600024692"
             tecnico = "JOSÉ DE ARAUJO ANDRADE JUNIOR"
             data_aprov = "07/03/2027 (190 DIAS)"
+            responsavel_obra = "EXCLUSIVA DA DISTRIBUIDORA" # <-- Correção adicionada aqui!
             
             # --- COLUNA 2: DADOS ---
             with c2:
