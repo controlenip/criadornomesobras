@@ -67,13 +67,15 @@ def carregar_dados(file):
     return df_sisco, df_notas, df_dados
 
 # ==========================================
-# 2. UPLOAD E LISTAS SUSPENSAS
+# 2. LOGO NO TOPO, UPLOAD E LISTAS SUSPENSAS
 # ==========================================
 
-# Inserção da Logo
+# Inserção da Logo perfeitamente centralizada no TOPO
 if os.path.exists("LOGO_NIP.png"):
-    st.sidebar.image("LOGO_NIP.png", use_container_width=True)
-    st.sidebar.markdown("---")
+    col_logo1, col_logo2, col_logo3 = st.columns([2, 1, 2])
+    with col_logo2:
+        st.image("LOGO_NIP.png", use_container_width=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
 arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
@@ -401,4 +403,3 @@ with c4:
     
     st.markdown('<div class="eh" style="margin-top: 15px;">🚧 NOMES DAS OBRAS 🚧</div>', unsafe_allow_html=True)
     st.markdown(nomes_obras_html, unsafe_allow_html=True)
-    
