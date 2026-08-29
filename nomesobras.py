@@ -3,7 +3,7 @@ import pandas as pd
 import unicodedata
 
 # ==========================================
-# 1. CONFIGURAÇÕES DA PÁGINA E CSS
+# 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide")
 
@@ -11,25 +11,36 @@ st.markdown("""
 <style>
     [data-testid="stHeader"] { display: none !important; }
     
-    .eh { background-color: #00b050; color: white; text-align: center; font-weight: 900; padding: 4px; border: 3px solid black; border-bottom: 0px; font-size: 14px; text-transform: uppercase; font-family: 'Arial Black', sans-serif;}
-    .eh-yellow { background-color: #ffeb9c; color: #c00000; text-align: center; font-weight: 900; padding: 4px; border: 3px solid black; border-bottom: 0px; font-size: 14px; text-transform: uppercase; font-family: 'Arial Black', sans-serif;}
-    .eh-dark { background-color: #00b050; color: white; font-weight: 900; padding: 4px; border: 3px solid black; border-bottom: 0px; font-size: 13px; text-transform: uppercase; font-family: 'Arial Black', sans-serif;}
+    /* Configuração Global de Fontes Menores */
+    html, body, [class*="css"] { font-size: 12px !important; }
     
-    .et { width: 100%; border-collapse: collapse; border: 3px solid black; background-color: white; margin-bottom: 15px; }
-    .et td { border: 2px solid black; padding: 2px 6px; font-weight: bold; font-family: Calibri, Arial, sans-serif; font-size: 13px; height: 26px; vertical-align: middle; }
+    /* Cabeçalhos Modernos */
+    .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
+    .eh-yellow { background-color: #fef08a; color: #991b1b; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0; margin-bottom: 5px;}
+    .eh-dark { background-color: #047857; color: white; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; border-radius: 4px 4px 0 0;}
     
-    .lbl { width: 35%; background-color: #ffffff; color: black; }
-    .lbl-y { width: 35%; background-color: #ffeb9c; color: black; }
-    .val { width: 65%; background-color: #ffffff; color: black; text-transform: uppercase; }
+    /* Tabelas HTML */
+    .et { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background-color: white; margin-bottom: 15px; border-radius: 0 0 4px 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);}
+    .et td { border: 1px solid #e2e8f0; padding: 4px 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; height: 26px; vertical-align: middle; }
     
-    .text-blue { color: #0070c0 !important; }
-    .text-red { color: #c00000 !important; }
-    .text-green { color: #00b050 !important; }
+    .lbl { width: 35%; background-color: #f8fafc; color: #475569; font-weight: 600;}
+    .val { width: 65%; background-color: #ffffff; color: #0f172a; font-weight: 700; text-transform: uppercase; }
     
-    .obs-box { background-color: #595959; color: white; border: 3px solid black; padding: 8px; font-family: Calibri, Arial, sans-serif; font-size: 12px; font-weight: bold; font-style: italic; min-height: 250px; white-space: pre-wrap; line-height: 1.2; overflow-y: auto;}
-    .desc-row { border: 2px solid black; height: 22px; width: 100%; margin-bottom: 2px; padding: 2px 6px; font-weight: 900; font-family: 'Arial Black', sans-serif; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: black; line-height: 14px;}
+    /* Cores de Texto Profissionais */
+    .text-blue { color: #2563eb !important; }
+    .text-red { color: #dc2626 !important; }
+    .text-green { color: #059669 !important; }
     
-    .stTextArea textarea { border: 3px solid black !important; border-radius: 0px !important; font-weight: bold; font-family: monospace; }
+    /* Caixas de Texto (Observações e Descrições) */
+    .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 200px; white-space: pre-wrap; line-height: 1.4; overflow-y: auto; border-radius: 0 0 4px 4px;}
+    .desc-row { border: 1px solid #cbd5e1; height: 26px; width: 100%; margin-bottom: 4px; padding: 4px 8px; font-weight: 600; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
+    
+    /* Formatação dos Campos Interativos (A mágica do alinhamento) */
+    .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
+    div[data-baseweb="select"] > div { border: 1px solid #cbd5e1; border-radius: 4px; min-height: 35px !important; height: 35px !important; font-size: 11px; background-color: white;}
+    input[data-testid="stTextInput"] { border: 1px solid #cbd5e1; border-radius: 4px; height: 35px !important; min-height: 35px !important; font-size: 11px; font-weight: bold; background-color: white;}
+    .stSelectbox, .stTextInput { margin-bottom: -10px !important; }
+    .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,6 +83,7 @@ if arquivo_bd:
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
         if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted(df_dados['ID DO NUMERO'].dropna().unique().tolist())
 
+# Layout: 4 Colunas simulando o Excel
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 with c1:
@@ -80,12 +92,15 @@ with c1:
     
 solicitacoes = [s.strip() for s in sols_input.split('\n') if s.strip()]
 
+# Variáveis Padrão
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, regional_formatado, obs = "", "", "", "", "", ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto, reg_raw = "", "", "", ""
 obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
+obra_especial = "Normal"
 
+# Lógica principal de extração de dados
 if solicitacoes and (not df_sisco.empty or not df_notas.empty):
     solicitacao_principal = solicitacoes[0]
     resultado_sisco = df_sisco[df_sisco['Nota CCS'] == solicitacao_principal] if not df_sisco.empty else pd.DataFrame()
@@ -148,6 +163,7 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
 
+
 # ==========================================
 # 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
 # ==========================================
@@ -166,18 +182,28 @@ with c2:
     </table>
     """, unsafe_allow_html=True)
     
-    # Renderização da Caixa Amarela
-    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
+    st.markdown('<div class="eh-yellow">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
     
-    # Formulário nativo do Streamlit para colher os dados
+    # --- FUNÇÃO PARA CRIAR LINHAS ALINHADAS PERFEITAMENTE ---
+    def criar_linha_input(label, widget_type, key, options=None):
+        cA, cB = st.columns([1, 2.5], gap="small")
+        with cA:
+            st.markdown(f'<div class="lbl-box">{label}</div>', unsafe_allow_html=True)
+        with cB:
+            if widget_type == "select":
+                return st.selectbox("", options, key=key, label_visibility="collapsed")
+            else:
+                return st.text_input("", key=key, label_visibility="collapsed")
+
     with st.container():
-        man_especial = st.selectbox("Obra Especial ?", ["Normal", "Sim"], label_visibility="collapsed")
-        man_tipo_obra = st.selectbox("Tipo de Obra", [""] + lista_tipos_obra, label_visibility="collapsed")
-        man_pi = st.selectbox("PI", [""] + lista_pi, label_visibility="collapsed")
-        man_mun = st.selectbox("Municipio", [""] + lista_mun, label_visibility="collapsed")
-        man_id = st.selectbox("ID do Numero", [""] + lista_id, label_visibility="collapsed")
-        man_sol = st.text_input("Solicitação", label_visibility="collapsed")
-        man_livre = st.text_input("Escrita Livre", label_visibility="collapsed")
+        man_especial = criar_linha_input("Obra Especial ?", "select", "i1", ["Normal", "Sim"])
+        man_tipo_obra = criar_linha_input("Tipo de Obra", "select", "i2", [""] + lista_tipos_obra)
+        man_pi = criar_linha_input("PI", "select", "i3", [""] + lista_pi)
+        man_mun = criar_linha_input("Municipio", "select", "i4", [""] + lista_mun)
+        man_id = criar_linha_input("ID do Numero", "select", "i5", [""] + lista_id)
+        man_sol = criar_linha_input("Solicitação", "text", "i6")
+        man_livre = criar_linha_input("Escrita Livre", "text", "i7")
+
 
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS (OVERRIDE MANUAL)
@@ -275,8 +301,8 @@ for _ in range(max(linhas_restantes, 0)):
 # 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
 # ==========================================
 with c3:
-    lbl_obra_estilo = 'class="lbl"' if not man_tipo_obra and not man_pi and not man_livre else 'class="lbl text-red" style="background-color: #ffeb9c;"'
-    val_obra_estilo = 'class="val text-green"' if not man_tipo_obra and not man_pi and not man_livre else 'class="val text-red" style="background-color: #ffeb9c; font-style: italic;"'
+    lbl_obra_estilo = 'class="lbl"' if not man_tipo_obra and not man_pi and not man_livre else 'class="lbl text-red" style="background-color: #fef08a;"'
+    val_obra_estilo = 'class="val text-green"' if not man_tipo_obra and not man_pi and not man_livre else 'class="val text-red" style="background-color: #fef08a; font-style: italic;"'
     lbl_obra_texto = "⚡ Obra Relampago ⚡" if not man_tipo_obra and not man_pi and not man_livre else "🚧 Nome da Obra 🚧"
     
     st.markdown(f"""
