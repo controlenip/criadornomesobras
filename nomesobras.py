@@ -3,7 +3,7 @@ import pandas as pd
 import unicodedata
 
 # ==========================================
-# 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO)
+# 1. CONFIGURAÇÕES DA PÁGINA E CSS
 # ==========================================
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide")
 
@@ -193,10 +193,17 @@ with c2:
         man_sol = criar_linha_input("Solicitação", "text", "i6")
         man_livre = criar_linha_input("Escrita Livre", "text", "i7")
 
+
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS (OVERRIDE MANUAL)
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
+
+# NOVIDADE AQUI: Se a caixa de município manual foi preenchida, o sistema descobre a Regional por ela!
+if man_mun and not df_dados.empty and 'SIGLA-MUNICIPIO' in df_dados.columns:
+    dados_mun = df_dados[df_dados['SIGLA-MUNICIPIO'] == man_mun]
+    if not dados_mun.empty:
+        reg_raw = str(dados_mun.iloc[0].get('REGIONAL', '')).upper()
 
 regional_formatado = ""
 regional_label = "Regional"
@@ -251,6 +258,7 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
 
 if not area_resp: area_resp = ""
 
+
 # ==========================================
 # 5. GERADOR EM MASSA DOS NOMES
 # ==========================================
@@ -259,9 +267,7 @@ pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
 pref_id = man_id.split('-')[0] if man_id else "NS"
 
-# --- CORREÇÃO AQUI: Geração de nome manual, MESMO SE A CAIXA DE SOLICITAÇÕES ESTIVER VAZIA ---
 if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol or man_livre):
-    # O usuário não colou nota, mas está digitando no formulário amarelo!
     pref_mun = man_mun.split('-')[0] if man_mun else "XXX"
     val_sol_final = man_sol if man_sol else "0000000000"
     val_livre_final = man_livre if man_livre else "NOME"
@@ -273,7 +279,6 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
     descricoes_html += f'<div class="desc-row">CRIADO MANUALMENTE</div>\n'
 else:
-    # Lógica normal iterando pelas notas coladas
     for sol in solicitacoes:
         res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
         res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
@@ -313,7 +318,6 @@ else:
         descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
         nomes_obras_html += f'<div class="desc-row">{nome_str}</div>\n'
 
-# Adiciona linhas em branco para manter a estética
 linhas_restantes = 25 - max(len(solicitacoes), 1 if obra_relampago_formatada else 0)
 for _ in range(max(linhas_restantes, 0)):
     descricoes_html += '<div class="desc-row"></div>\n'
