@@ -7,13 +7,13 @@ import base64
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
-# Adicionado initial_sidebar_state="expanded" para a barra iniciar aberta
+# initial_sidebar_state="expanded" para a barra iniciar aberta
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    /* Ajuste para a barra lateral nativa aparecer corretamente e dar respiro no topo */
-    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+    /* Aumentado o padding-top para 4.5rem para garantir que a logo não seja cortada no topo */
+    .block-container { padding-top: 4.5rem !important; padding-bottom: 2rem !important; }
     html, body, [class*="css"] { font-size: 12px !important; }
     
     .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
@@ -78,13 +78,13 @@ def carregar_dados(file):
 # 2. LOGO NO TOPO, UPLOAD E LISTAS SUSPENSAS
 # ==========================================
 
-# Inserção da Logo via HTML (Sem Zoom, tamanho perfeito e centralizado)
+# Inserção da Logo via HTML (Sem Zoom, tamanho perfeito, com margem extra no topo)
 if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
         b64_logo = base64.b64encode(image_file.read()).decode()
     
     st.markdown(f'''
-        <div style="text-align: center; margin-bottom: 25px;">
+        <div style="text-align: center; margin-top: 10px; margin-bottom: 25px;">
             <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
         </div>
     ''', unsafe_allow_html=True)
