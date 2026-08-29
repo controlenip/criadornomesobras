@@ -50,47 +50,79 @@ def remover_acentos(texto):
     texto = str(texto).upper().strip()
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
+# Função auxiliar para Extração Inteligente com Prioridade (BI -> Sisco -> NotasSisgb)
+def get_val(r_bi, r_sisco, r_notas, col_bi, col_sisco, col_notas, default=""):
+    val = ""
+    if r_bi is not None and col_bi in r_bi: val = str(r_bi.get(col_bi, ''))
+    if (not val or val.lower() == 'nan') and r_sisco is not None and col_sisco in r_sisco: val = str(r_sisco.get(col_sisco, ''))
+    if (not val or val.lower() == 'nan') and r_notas is not None and col_notas in r_notas: val = str(r_notas.get(col_notas, ''))
+    if not val or val.lower() == 'nan': return default
+    return val
+
 @st.cache_data(show_spinner=False)
 def carregar_dados(file):
     xls = pd.ExcelFile(file)
-    df_sisco = pd.read_excel(xls, sheet_name='Sisco')
-    if 'Nota CCS' in df_sisco.columns:
-        df_sisco['Nota CCS'] = df_sisco['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
+    
+    try: 
+        df_sisco = pd.read_excel(xls, sheet_name='Sisco')
+        if 'Nota CCS' in df_sisco.columns: df_sisco['Nota CCS'] = df_sisco['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
+    except: df_sisco = pd.DataFrame()
         
-    try: df_notas = pd.read_excel(xls, sheet_name='NotasSisgb')
+    try: 
+        df_notas = pd.read_excel(xls, sheet_name='NotasSisgb')
+        if 'PROTOCOLO' in df_notas.columns: df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).str.replace('.0', '', regex=False)
     except: df_notas = pd.DataFrame()
-    if not df_notas.empty and 'PROTOCOLO' in df_notas.columns:
-        df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).str.replace('.0', '', regex=False)
         
     try: df_dados = pd.read_excel(xls, sheet_name='Dados', header=1)
     except: df_dados = pd.DataFrame()
-    return df_sisco, df_notas, df_dados
+    
+    # Prioridade Master: Tenta ler a aba BI (Levantamentos)
+    try:
+        df_bi = pd.read_excel(xls, sheet_name='BI', header=1)
+        if 'Nota CCS' not in df_bi.columns: df_bi = pd.read_excel(xls, sheet_name='BI', header=2)
+        if 'Nota CCS' in df_bi.columns: df_bi['Nota CCS'] = df_bi['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
+    except: df_bi = pd.DataFrame()
+        
+    return df_sisco, df_notas, df_dados, df_bi
 
 # ==========================================
 # 2. MENU LATERAL, UPLOAD E LISTAS SUSPENSAS
 # ==========================================
 
-# Inserção da Logo
-try:
+# Inserção da Logo de forma Robusta
+logo_path = os.path.join(os.path.dirname(__file__), "LOGO_NIP.png")
+if os.path.exists(logo_path):
+    st.sidebar.image(logo_path, use_container_width=True)
+    st.sidebar.markdown("---")
+elif os.path.exists("LOGO_NIP.png"):
     st.sidebar.image("LOGO_NIP.png", use_container_width=True)
     st.sidebar.markdown("---")
-except:
-    pass
+else:
+    st.sidebar.warning("⚠️ Logo 'LOGO_NIP.png' não encontrada na pasta. Verifique se o nome está correto (maiúsculas/minúsculas).")
 
 arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
-df_sisco, df_notas, df_dados = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+df_sisco, df_notas, df_dados, df_bi = pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 lista_tipos_obra, lista_pi, lista_mun, lista_id = [], [], [], []
+map_tipo_obra, map_mun = {}, {}
 
 if arquivo_bd:
-    with st.spinner("Carregando banco de dados..."):
-        df_sisco, df_notas, df_dados = carregar_dados(arquivo_bd)
+    with st.spinner("Carregando banco de dados com Inteligência BI..."):
+        df_sisco, df_notas, df_dados, df_bi = carregar_dados(arquivo_bd)
         
     if not df_dados.empty:
         if 'TIPO DE OBRA' in df_dados.columns: lista_tipos_obra = sorted(df_dados['TIPO DE OBRA'].dropna().unique().tolist())
         if 'PI' in df_dados.columns: lista_pi = sorted(df_dados['PI'].dropna().unique().tolist())
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
         if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted([str(x).replace('.0', '') for x in df_dados['ID DO NUMERO'].dropna().unique().tolist()])
+        
+        if 'TIPO DE OBRA NO SISCO' in df_dados.columns and 'SIGLA' in df_dados.columns:
+            df_to = df_dados.dropna(subset=['TIPO DE OBRA NO SISCO', 'SIGLA'])
+            map_tipo_obra = dict(zip(df_to['TIPO DE OBRA NO SISCO'].astype(str).str.strip().str.upper(), df_to['SIGLA'].astype(str).str.strip().str.upper()))
+            
+        if 'MUNICIPIO' in df_dados.columns and 'SIGLA.1' in df_dados.columns:
+            df_mu = df_dados.dropna(subset=['MUNICIPIO', 'SIGLA.1'])
+            map_mun = dict(zip(df_mu['MUNICIPIO'].astype(str).apply(remover_acentos), df_mu['SIGLA.1'].astype(str).str.strip().str.upper()))
 
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
@@ -106,69 +138,36 @@ pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
 obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
 
-if solicitacoes and (not df_sisco.empty or not df_notas.empty):
-    solicitacao_principal = solicitacoes[0]
-    resultado_sisco = df_sisco[df_sisco['Nota CCS'] == solicitacao_principal] if not df_sisco.empty else pd.DataFrame()
-    resultado_notas = df_notas[df_notas['PROTOCOLO'] == solicitacao_principal] if not df_notas.empty else pd.DataFrame()
+if solicitacoes:
+    sol_princ = solicitacoes[0]
     
-    if not resultado_sisco.empty or not resultado_notas.empty:
-        r_sisco = resultado_sisco.iloc[0] if not resultado_sisco.empty else None
-        r_notas = resultado_notas.iloc[0] if not resultado_notas.empty else None
+    r_bi = df_bi[df_bi['Nota CCS'] == sol_princ].iloc[0] if not df_bi.empty and not df_bi[df_bi['Nota CCS'] == sol_princ].empty else None
+    r_sisco = df_sisco[df_sisco['Nota CCS'] == sol_princ].iloc[0] if not df_sisco.empty and not df_sisco[df_sisco['Nota CCS'] == sol_princ].empty else None
+    r_notas = df_notas[df_notas['PROTOCOLO'] == sol_princ].iloc[0] if not df_notas.empty and not df_notas[df_notas['PROTOCOLO'] == sol_princ].empty else None
+    
+    if r_bi is not None or r_sisco is not None or r_notas is not None:
+        cc = get_val(r_bi, r_sisco, r_notas, 'CC', 'CC', 'CONTA CONTRATO').replace('.0', '')
+        instalacao = get_val(r_bi, r_sisco, r_notas, 'Instalação', 'INSTALACAO', 'INSTALAÇÃO').replace('.0', '')
         
-        cc = str(r_sisco.get('CC', '')) if r_sisco is not None else ""
-        if not cc or cc.lower() == 'nan': cc = str(r_notas.get('CONTA CONTRATO', '')) if r_notas is not None else ""
-        cc = cc.replace('.0', '')
+        fase = get_val(r_bi, r_sisco, r_notas, 'FASE', 'Tipo de Carga', '', 'MO').upper()
+        if 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase or not fase: fase = "MO"
             
-        instalacao = str(r_sisco.get('INSTALACAO', '')) if r_sisco is not None else ""
-        if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
-        instalacao = instalacao.replace('.0', '')
-            
-        fase = str(r_sisco.get('Tipo de Carga', 'MO')).upper() if r_sisco is not None else "MO"
-        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
-            
-        tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
-        if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
-        parts = tipo_obra_raw.replace("-", " ").strip().split(" ")
-        if len(parts) > 3:
-            tipo_obra_sisco = " ".join(parts[:3])
-        else:
-            tipo_obra_sisco = ""
-            
-        data_abertura = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
-        if not data_abertura or data_abertura.lower() == 'nan': data_abertura = str(r_notas.get('DATA DA SOLICITAÇÃO', ''))[:10] if r_notas is not None else ""
-            
-        lat = str(r_sisco.get('Latitude', '')) if r_sisco is not None else ""
-        if not lat or lat.lower() == 'nan': lat = str(r_notas.get('LATITUDE', '')) if r_notas is not None else ""
-        lat = lat.replace('.', ',')
+        tipo_obra_raw = get_val(r_bi, r_sisco, r_notas, 'Tipo de Projeto Descrição', 'Detalhes', '')
+        parts = tipo_obra_raw.replace("-", " ").strip().split()
+        tipo_obra_sisco = " ".join(parts[:3]) if parts else ""
         
-        lon = str(r_sisco.get('Longitude', '')) if r_sisco is not None else ""
-        if not lon or lon.lower() == 'nan': lon = str(r_notas.get('LONGITUDE', '')) if r_notas is not None else ""
-        lon = lon.replace('.', ',')
+        data_abertura = get_val(r_bi, r_sisco, r_notas, 'Data Abertura', 'Data Abertura', 'DATA DA SOLICITAÇÃO')[:10]
+        lat = get_val(r_bi, r_sisco, r_notas, 'LATITUDE', 'Latitude', 'LATITUDE').replace('.', ',')
+        lon = get_val(r_bi, r_sisco, r_notas, 'LONGITUDE', 'Longitude', 'LONGITUDE').replace('.', ',')
         
-        cidade_raw = str(r_sisco.get('Município', '')) if r_sisco is not None else ""
-        if not cidade_raw or cidade_raw.lower() == 'nan': cidade_raw = str(r_notas.get('MUNICIPIO', '')) if r_notas is not None else ""
-        cidade_auto = remover_acentos(cidade_raw)
-        
-        cliente_auto = str(r_sisco.get('Nome', '')) if r_sisco is not None else ""
-        if not cliente_auto or cliente_auto.lower() == 'nan': cliente_auto = str(r_notas.get('NOME DO SOLICITANTE', '')) if r_notas is not None else ""
-        cliente_auto = cliente_auto.upper()
-            
-        endereco_auto = str(r_notas.get('ENDEREÇO', '')) if r_notas is not None else ""
-        if not endereco_auto or endereco_auto.lower() == 'nan': endereco_auto = str(r_sisco.get('Endereço', '')) if r_sisco is not None else ""
-        
-        pi_auto = str(r_notas.get('TIPO LIGAÇÃO', '')) if r_notas is not None else ""
-        if not pi_auto or pi_auto.lower() == 'nan': pi_auto = str(r_sisco.get('Tipo de Projeto(PI)', '')) if r_sisco is not None else ""
-        if pi_auto.lower() == 'nan': pi_auto = ""
-            
-        reg_raw = str(r_notas.get('REGIONAL', '')) if r_notas is not None else ""
-        if not reg_raw or reg_raw.lower() == 'nan': reg_raw = str(r_sisco.get('Regional', '')) if r_sisco is not None else ""
-        reg_raw = reg_raw.upper()
-        
-        obs = str(r_sisco.get('Obs(última obs)', '')) if r_sisco is not None else ""
-        if not obs or obs.lower() == 'nan': obs = str(r_notas.get('PONTO DE REFERENCIA', '')) if r_notas is not None else ""
-        if obs.lower() == 'nan': obs = ""
+        cidade_auto = remover_acentos(get_val(r_bi, r_sisco, r_notas, 'Município', 'Município', 'MUNICIPIO'))
+        cliente_auto = get_val(r_bi, r_sisco, r_notas, 'NOME CLIENTE', 'Nome', 'NOME DO SOLICITANTE').upper()
+        endereco_auto = get_val(r_bi, r_sisco, r_notas, 'TEXTO_GERAL', 'Endereço', 'ENDEREÇO')
+        pi_auto = get_val(r_bi, r_sisco, r_notas, 'Tipo de Projeto(PI)', 'Tipo de Projeto(PI)', 'TIPO LIGAÇÃO')
+        reg_raw = get_val(r_bi, r_sisco, r_notas, 'Regional', 'Regional', 'REGIONAL').upper()
+        obs = get_val(r_bi, r_sisco, r_notas, 'TEXTO', 'Obs(última obs)', 'PONTO DE REFERENCIA')
     else:
-        st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
+        st.toast(f"❌ A nota principal '{sol_princ}' não foi encontrada.")
 
 # ==========================================
 # 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
@@ -195,10 +194,8 @@ with c2:
         with cA:
             st.markdown(f'<div class="lbl-box">{label}</div>', unsafe_allow_html=True)
         with cB:
-            if widget_type == "select":
-                return st.selectbox("", options, key=key, label_visibility="collapsed")
-            else:
-                return st.text_input("", key=key, label_visibility="collapsed")
+            if widget_type == "select": return st.selectbox("", options, key=key, label_visibility="collapsed")
+            else: return st.text_input("", key=key, label_visibility="collapsed")
 
     with st.container():
         man_especial = criar_linha_input("Obra Especial ?", "select", "i1", ["", "OE-Obras Juridicas e/ou Especiais", "EX-Exceções"])
@@ -211,45 +208,33 @@ with c2:
         man_endereco = criar_linha_input("Endereço", "text", "i8")
         man_cc = criar_linha_input("Conta Contrato", "text", "i9")
         
-        # Botão para zerar todos os campos manuais
         st.markdown("<br>", unsafe_allow_html=True)
         st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
 
 # ==========================================
-# 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
+# 4. LÓGICA DE CRUZAMENTO DE DADOS
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
 
-# Repasses Manuais para a Tabela SGO
-if man_mun:
-    cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
-if man_livre:
-    cliente_auto = man_livre.upper()
-if man_endereco:
-    endereco_auto = man_endereco.upper()
-if man_cc:
-    cc = man_cc
+if man_mun: cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
+if man_livre: cliente_auto = man_livre.upper()
+if man_endereco: endereco_auto = man_endereco.upper()
+if man_cc: cc = man_cc
 
 if man_mun and not df_dados.empty and 'SIGLA-MUNICIPIO' in df_dados.columns:
     dados_mun = df_dados[df_dados['SIGLA-MUNICIPIO'] == man_mun]
-    if not dados_mun.empty:
-        reg_raw = str(dados_mun.iloc[0].get('REGIONAL', '')).upper()
+    if not dados_mun.empty: reg_raw = str(dados_mun.iloc[0].get('REGIONAL', '')).upper()
 
 regional_formatado = ""
 regional_label = "Regional"
 col_idx = 0
 
 if reg_raw:
-    if "SUL" in reg_raw: 
-        regional_formatado = "CM04-IMPERATRIZ"; col_idx = 14; regional_label = "Regional Sul"
-    elif "CENTRO" in reg_raw: 
-        regional_formatado = "CM03-BACABAL"; col_idx = 19; regional_label = "Regional Centro"
-    elif "LESTE" in reg_raw: 
-        regional_formatado = "CM02-TIMON"; col_idx = 24; regional_label = "Regional Leste"
-    elif "NORTE" in reg_raw: 
-        regional_formatado = "CM01-SAO LUIS"; col_idx = 4; regional_label = "Regional Norte"
-    elif "NOROESTE" in reg_raw: 
-        regional_formatado = "CM01-PINHEIRO"; col_idx = 9; regional_label = "Regional Noroeste"
+    if "SUL" in reg_raw: regional_formatado = "CM04-IMPERATRIZ"; col_idx = 14; regional_label = "Regional Sul"
+    elif "CENTRO" in reg_raw: regional_formatado = "CM03-BACABAL"; col_idx = 19; regional_label = "Regional Centro"
+    elif "LESTE" in reg_raw: regional_formatado = "CM02-TIMON"; col_idx = 24; regional_label = "Regional Leste"
+    elif "NORTE" in reg_raw: regional_formatado = "CM01-SAO LUIS"; col_idx = 4; regional_label = "Regional Norte"
+    elif "NOROESTE" in reg_raw: regional_formatado = "CM01-PINHEIRO"; col_idx = 9; regional_label = "Regional Noroeste"
 
 area_resp = ""
 if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
@@ -258,19 +243,14 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         r_dados = dados_pi.iloc[0]
         
         area_resp_nova = str(r_dados.get('Tipo', ''))
-        if area_resp_nova.lower() != 'nan' and area_resp_nova != "":
-            area_resp = area_resp_nova.upper()
+        if area_resp_nova.lower() != 'nan' and area_resp_nova: area_resp = area_resp_nova.upper()
             
         tipo_nota_parceiro = str(r_dados.get('Tipo de NS|Parceiro', ''))
         responsavel_obra = str(r_dados.get('Resp. Obra', ''))
-        
         qtd_dias = str(r_dados.get('Qtd dias', '')).replace('.0', '')
         data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({qtd_dias} DIAS)"
         
-        if pi_ativo in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"]:
-            total_val = 7000 * (len(solicitacoes) if solicitacoes else 1)
-        else:
-            total_val = 30000 * (len(solicitacoes) if solicitacoes else 1)
+        total_val = 7000 * max(len(solicitacoes), 1) if pi_ativo in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"] else 30000 * max(len(solicitacoes), 1)
         valor_previsto = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         
         if col_idx > 0:
@@ -292,11 +272,11 @@ if not area_resp: area_resp = ""
 # 5. GERADOR EM MASSA DOS NOMES E DESCRIÇÕES
 # ==========================================
 pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
-pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
-pref_pi = pi_ativo if pi_ativo else "UNR"
 pref_id = man_id.split('-')[0] if man_id else "NS"
+pref_pi = pi_ativo if pi_ativo else "UNR"
 
 if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol or man_livre or man_endereco or man_cc):
+    pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
     pref_mun = man_mun.split('-')[0] if man_mun else "XXX"
     val_sol_final = man_sol if man_sol else "0000000000"
     val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else "NOME"
@@ -304,49 +284,39 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     val_cc_final = man_cc if man_cc else "0000000000"
     
     raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
-    clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
-    obra_relampago_formatada = clean_name[:34].upper()
-    
+    obra_relampago_formatada = raw_name.replace(".", "").replace("_", "").replace(" ", "-")[:34].upper()
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final}."
     
     nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
     descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
 else:
     for sol in solicitacoes:
-        res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
-        res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
+        r_bi_loop = df_bi[df_bi['Nota CCS'] == sol].iloc[0] if not df_bi.empty and not df_bi[df_bi['Nota CCS'] == sol].empty else None
+        r_sisco_loop = df_sisco[df_sisco['Nota CCS'] == sol].iloc[0] if not df_sisco.empty and not df_sisco[df_sisco['Nota CCS'] == sol].empty else None
+        r_notas_loop = df_notas[df_notas['PROTOCOLO'] == sol].iloc[0] if not df_notas.empty and not df_notas[df_notas['PROTOCOLO'] == sol].empty else None
         
-        if not res_sol_sisco.empty or not res_sol_notas.empty:
-            r_sol_sisco = res_sol_sisco.iloc[0] if not res_sol_sisco.empty else None
-            r_sol_notas = res_sol_notas.iloc[0] if not res_sol_notas.empty else None
+        if r_bi_loop is not None or r_sisco_loop is not None or r_notas_loop is not None:
+            cc_sol = get_val(r_bi_loop, r_sisco_loop, r_notas_loop, 'CC', 'CC', 'CONTA CONTRATO').replace('.0', '')
+            cli_sol = get_val(r_bi_loop, r_sisco_loop, r_notas_loop, 'NOME CLIENTE', 'Nome', 'NOME DO SOLICITANTE').upper()
+            cid_sol = remover_acentos(get_val(r_bi_loop, r_sisco_loop, r_notas_loop, 'Município', 'Município', 'MUNICIPIO'))
             
-            cc_sol = str(r_sol_sisco.get('CC', '')) if r_sol_sisco is not None else ""
-            if not cc_sol or cc_sol.lower() == 'nan': cc_sol = str(r_sol_notas.get('CONTA CONTRATO', '')) if r_sol_notas is not None else ""
-            cc_sol = cc_sol.replace('.0', '')
+            to_raw = get_val(r_bi_loop, r_sisco_loop, r_notas_loop, 'Tipo de Projeto Descrição', 'Detalhes', '')
+            to_parts = to_raw.replace("-", " ").strip().split()
+            to_sisco = " ".join(to_parts[:3]) if to_parts else ""
             
-            cli_sol = str(r_sol_sisco.get('Nome', '')) if r_sol_sisco is not None else ""
-            if not cli_sol or cli_sol.lower() == 'nan': cli_sol = str(r_sol_notas.get('NOME DO SOLICITANTE', '')) if r_sol_notas is not None else ""
-            cli_sol = cli_sol.upper()
+            pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else map_tipo_obra.get(to_sisco.upper(), "CT")
+            pref_mun = man_mun.split('-')[0] if man_mun else map_mun.get(cid_sol, cid_sol[:3] if cid_sol else "XXX")
             
-            cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
-            if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
-            
-            pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
             val_sol_final = man_sol if man_sol else sol
-            
             val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else cli_sol.replace(" ", "-")[:15]
             val_livre_final_desc = man_livre.upper() if man_livre else cli_sol
-            
             val_cc_final = man_cc if man_cc else cc_sol
             
             desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final}."
-            
             raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
-            clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
-            nome_str = clean_name[:34].upper()
+            nome_str = raw_name.replace(".", "").replace("_", "").replace(" ", "-")[:34].upper()
             
-            if sol == solicitacoes[0]:
-                obra_relampago_formatada = nome_str
+            if sol == solicitacoes[0]: obra_relampago_formatada = nome_str
         else:
             desc_str = f"{sol} - NÃO ENCONTRADO"
             nome_str = f"{sol} - NÃO ENCONTRADO"
