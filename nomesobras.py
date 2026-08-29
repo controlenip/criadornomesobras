@@ -11,8 +11,10 @@ st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️"
 
 st.markdown("""
 <style>
-    /* Ajuste de espaçamento no topo sem esconder a barra lateral (Header) */
-    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+    /* Ajuste de espaçamento no topo (Aumentado para não cortar a logo) */
+    .block-container { padding-top: 4rem !important; padding-bottom: 2rem !important; }
+    
+    [data-testid="stHeader"] { display: none !important; }
     html, body, [class*="css"] { font-size: 12px !important; }
     
     .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
@@ -89,14 +91,14 @@ def carregar_dados(file):
 # 2. LOGO, UPLOAD E LISTAS SUSPENSAS
 # ==========================================
 
-# Inserção da Logo via HTML (Evita Zoom do Streamlit e define um tamanho bem profissional)
+# Inserção da Logo via HTML (Evita Zoom, centraliza e evita corte no topo)
 if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
         b64_logo = base64.b64encode(image_file.read()).decode()
     
     st.markdown(f'''
-        <div style="text-align: center; margin-bottom: 25px;">
-            <img src="data:image/png;base64,{b64_logo}" style="max-width: 160px; width: 100%; height: auto; pointer-events: none;">
+        <div style="text-align: center; margin-top: 10px; margin-bottom: 25px;">
+            <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
         </div>
     ''', unsafe_allow_html=True)
 
