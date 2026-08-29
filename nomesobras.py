@@ -83,7 +83,6 @@ if arquivo_bd:
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
         if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted([str(x).replace('.0', '') for x in df_dados['ID DO NUMERO'].dropna().unique().tolist()])
 
-# Layout: 4 Colunas simulando o Excel
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 with c1:
@@ -118,11 +117,14 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
+        # Padroniza FASE para "MO" caso esteja Não Especificada
         fase = str(r_sisco.get('Tipo de Carga', 'MO')).upper() if r_sisco is not None else "MO"
-        if fase.lower() == 'NAN': fase = "MO"
+        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase: fase = "MO"
             
-        tipo_obra_sisco = str(r_sisco.get('Tipo de Projeto Descrição', '')) if r_sisco is not None else ""
-        if tipo_obra_sisco.lower() == 'nan': tipo_obra_sisco = ""
+        # Extração de Tipo de Obra idêntico à fórmula do Excel (Pega as primeiras 3 palavras dos Detalhes)
+        tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
+        if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
+        tipo_obra_sisco = " ".join(tipo_obra_raw.replace("-", " ").split()[:3])
             
         data_abertura = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
         if not data_abertura or data_abertura.lower() == 'nan': data_abertura = str(r_notas.get('DATA DA SOLICITAÇÃO', ''))[:10] if r_notas is not None else ""
@@ -145,9 +147,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
             
         endereco_auto = str(r_notas.get('ENDEREÇO', '')) if r_notas is not None else ""
         if not endereco_auto or endereco_auto.lower() == 'nan': endereco_auto = str(r_sisco.get('Endereço', '')) if r_sisco is not None else ""
-            
-        area_resp = str(r_sisco.get('Descrição', 'EXPANSÃO')).upper() if r_sisco is not None else "EXPANSÃO"
-        if area_resp.lower() == 'nan': area_resp = "EXPANSÃO"
         
         pi_auto = str(r_notas.get('TIPO LIGAÇÃO', '')) if r_notas is not None else ""
         if not pi_auto or pi_auto.lower() == 'nan': pi_auto = str(r_sisco.get('Tipo de Projeto(PI)', '')) if r_sisco is not None else ""
@@ -203,7 +202,6 @@ with c2:
         man_sol = criar_linha_input("Solicitação", "text", "i6")
         man_livre = criar_linha_input("Escrita Livre", "text", "i7")
 
-
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS (OVERRIDE MANUAL)
 # ==========================================
@@ -222,10 +220,17 @@ elif "NORTE" in reg_raw:
 elif "NOROESTE" in reg_raw: 
     regional_formatado = "CM01-PINHEIRO"; col_idx = 9
 
+area_resp = ""
 if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
     dados_pi = df_dados[df_dados['PI'] == pi_ativo]
     if not dados_pi.empty:
         r_dados = dados_pi.iloc[0]
+        
+        # AQUI ESTÁ O SEGREDO: A área responsável agora cruza da aba Dados!
+        area_resp_nova = str(r_dados.get('Tipo', ''))
+        if area_resp_nova.lower() != 'nan' and area_resp_nova != "":
+            area_resp = area_resp_nova.upper()
+            
         tipo_nota_parceiro = str(r_dados.get('Tipo de NS|Parceiro', ''))
         responsavel_obra = str(r_dados.get('Resp. Obra', ''))
         
@@ -249,6 +254,8 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         if empresa.lower() == 'nan': empresa = ""
         if contrato.lower() == 'nan': contrato = ""
         if tecnico.lower() == 'nan': tecnico = ""
+
+if not area_resp: area_resp = ""
 
 # ==========================================
 # 5. GERADOR EM MASSA DOS NOMES
