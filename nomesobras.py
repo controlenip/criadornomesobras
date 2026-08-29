@@ -35,7 +35,7 @@ st.markdown("""
     .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 200px; white-space: pre-wrap; line-height: 1.4; overflow-y: auto; border-radius: 0 0 4px 4px;}
     .desc-row { border: 1px solid #cbd5e1; height: 26px; width: 100%; margin-bottom: 4px; padding: 4px 8px; font-weight: 600; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
     
-    /* Formatação dos Campos Interativos (A mágica do alinhamento) */
+    /* Formatação dos Campos Interativos */
     .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
     div[data-baseweb="select"] > div { border: 1px solid #cbd5e1; border-radius: 4px; min-height: 35px !important; height: 35px !important; font-size: 11px; background-color: white;}
     input[data-testid="stTextInput"] { border: 1px solid #cbd5e1; border-radius: 4px; height: 35px !important; min-height: 35px !important; font-size: 11px; font-weight: bold; background-color: white;}
@@ -98,7 +98,6 @@ cidade_auto, cliente_auto, endereco_auto, area_resp, regional_formatado, obs = "
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto, reg_raw = "", "", "", ""
 obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
-obra_especial = "Normal"
 
 # Lógica principal de extração de dados
 if solicitacoes and (not df_sisco.empty or not df_notas.empty):
@@ -163,7 +162,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
 
-
 # ==========================================
 # 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
 # ==========================================
@@ -182,7 +180,7 @@ with c2:
     </table>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="eh-yellow">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
+    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
     
     # --- FUNÇÃO PARA CRIAR LINHAS ALINHADAS PERFEITAMENTE ---
     def criar_linha_input(label, widget_type, key, options=None):
@@ -196,7 +194,8 @@ with c2:
                 return st.text_input("", key=key, label_visibility="collapsed")
 
     with st.container():
-        man_especial = criar_linha_input("Obra Especial ?", "select", "i1", ["Normal", "Sim"])
+        # Novo campo de Obra Especial (vazio por padrão e com os motivos adicionados)
+        man_especial = criar_linha_input("Obra Especial ?", "select", "i1", ["", "OE-Obras Juridicas e/ou Especiais", "EX-Exceções"])
         man_tipo_obra = criar_linha_input("Tipo de Obra", "select", "i2", [""] + lista_tipos_obra)
         man_pi = criar_linha_input("PI", "select", "i3", [""] + lista_pi)
         man_mun = criar_linha_input("Municipio", "select", "i4", [""] + lista_mun)
@@ -252,6 +251,8 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
 # ==========================================
 # 5. GERADOR EM MASSA DOS NOMES
 # ==========================================
+# Identifica o prefixo se uma obra especial foi escolhida ("OE" ou "EX")
+pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
 pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
 pref_id = man_id.split('-')[0] if man_id else "NS"
@@ -280,7 +281,9 @@ for sol in solicitacoes:
         val_livre_final = man_livre if man_livre else cli_sol.replace(" ", "-")[:15]
         
         desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
-        nome_str = f"{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
+        
+        # AQUI É ONDE O NOVO PREFIXO ENTRA (Ex: OE-CT-UNR...)
+        nome_str = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
         
         if sol == solicitacoes[0]:
             obra_relampago_formatada = nome_str
@@ -301,9 +304,9 @@ for _ in range(max(linhas_restantes, 0)):
 # 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
 # ==========================================
 with c3:
-    lbl_obra_estilo = 'class="lbl"' if not man_tipo_obra and not man_pi and not man_livre else 'class="lbl text-red" style="background-color: #fef08a;"'
-    val_obra_estilo = 'class="val text-green"' if not man_tipo_obra and not man_pi and not man_livre else 'class="val text-red" style="background-color: #fef08a; font-style: italic;"'
-    lbl_obra_texto = "⚡ Obra Relampago ⚡" if not man_tipo_obra and not man_pi and not man_livre else "🚧 Nome da Obra 🚧"
+    lbl_obra_estilo = 'class="lbl"' if not man_tipo_obra and not man_pi and not man_livre and not man_especial else 'class="lbl text-red" style="background-color: #fef08a;"'
+    val_obra_estilo = 'class="val text-green"' if not man_tipo_obra and not man_pi and not man_livre and not man_especial else 'class="val text-red" style="background-color: #fef08a; font-style: italic;"'
+    lbl_obra_texto = "⚡ Obra Relampago ⚡" if not man_tipo_obra and not man_pi and not man_livre and not man_especial else "🚧 Nome da Obra 🚧"
     
     st.markdown(f"""
     <div class="eh">📝 CRIAÇÃO DA NOTA SGO 📝</div>
