@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import unicodedata
+import os
 
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
@@ -66,8 +67,16 @@ def carregar_dados(file):
     return df_sisco, df_notas, df_dados
 
 # ==========================================
-# 2. UPLOAD E LISTAS SUSPENSAS
+# 2. MENU LATERAL, UPLOAD E LISTAS SUSPENSAS
 # ==========================================
+
+# Inserção da Logo
+try:
+    st.sidebar.image("LOGO_NIP.png", use_container_width=True)
+    st.sidebar.markdown("---")
+except:
+    pass
+
 arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
 df_sisco, df_notas, df_dados = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
