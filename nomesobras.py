@@ -191,21 +191,25 @@ with c2:
         man_mun = criar_linha_input("Municipio", "select", "i4", [""] + lista_mun)
         man_id = criar_linha_input("ID do Numero", "select", "i5", [""] + lista_id)
         man_sol = criar_linha_input("Solicitação", "text", "i6")
-        man_livre = criar_linha_input("Escrita Livre", "text", "i7")
+        man_livre = criar_linha_input("Escrita Livre / Cliente", "text", "i7")
+        man_endereco = criar_linha_input("Endereço", "text", "i8")
+        man_cc = criar_linha_input("Conta Contrato", "text", "i9")
 
 
 # ==========================================
-# 4. LÓGICA DE CRUZAMENTO DE DADOS (OVERRIDE MANUAL)
+# 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
 
-# Repassa Município Manual para a Tabela SGO
-if man_mun and not cidade_auto:
+# Repasses Manuais para a Tabela SGO (Sobrescrevem os dados originais se preenchidos)
+if man_mun:
     cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
-    
-# Repassa Cliente Manual para a Tabela SGO
-if man_livre and not cliente_auto:
+if man_livre:
     cliente_auto = man_livre.upper()
+if man_endereco:
+    endereco_auto = man_endereco.upper()
+if man_cc:
+    cc = man_cc
 
 if man_mun and not df_dados.empty and 'SIGLA-MUNICIPIO' in df_dados.columns:
     dados_mun = df_dados[df_dados['SIGLA-MUNICIPIO'] == man_mun]
@@ -266,24 +270,28 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
 if not area_resp: area_resp = ""
 
 # ==========================================
-# 5. GERADOR EM MASSA DOS NOMES
+# 5. GERADOR EM MASSA DOS NOMES E DESCRIÇÕES
 # ==========================================
 pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
 pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
 pref_id = man_id.split('-')[0] if man_id else "NS"
 
-if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol or man_livre):
+if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol or man_livre or man_endereco or man_cc):
     pref_mun = man_mun.split('-')[0] if man_mun else "XXX"
     val_sol_final = man_sol if man_sol else "0000000000"
-    val_livre_final = man_livre if man_livre else "NOME"
+    val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else "NOME"
+    val_livre_final_desc = man_livre.upper() if man_livre else "NOME"
+    val_cc_final = man_cc if man_cc else "0000000000"
     
-    raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
+    raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
     clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
     obra_relampago_formatada = clean_name[:34].upper()
     
+    desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final}."
+    
     nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
-    descricoes_html += f'<div class="desc-row">CRIADO MANUALMENTE</div>\n'
+    descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
 else:
     for sol in solicitacoes:
         res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
@@ -306,11 +314,15 @@ else:
             
             pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
             val_sol_final = man_sol if man_sol else sol
-            val_livre_final = man_livre if man_livre else cli_sol.replace(" ", "-")[:15]
             
-            desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
+            val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else cli_sol.replace(" ", "-")[:15]
+            val_livre_final_desc = man_livre.upper() if man_livre else cli_sol
             
-            raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
+            val_cc_final = man_cc if man_cc else cc_sol
+            
+            desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final}."
+            
+            raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
             clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
             nome_str = clean_name[:34].upper()
             
@@ -333,9 +345,9 @@ for _ in range(max(linhas_restantes, 0)):
 # 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
 # ==========================================
 with c3:
-    lbl_obra_estilo = 'class="lbl"' if not man_tipo_obra and not man_pi and not man_livre and not man_especial else 'class="lbl text-red" style="background-color: #fef08a;"'
-    val_obra_estilo = 'class="val text-green"' if not man_tipo_obra and not man_pi and not man_livre and not man_especial else 'class="val text-red" style="background-color: #fef08a; font-style: italic;"'
-    lbl_obra_texto = "⚡ Obra Relampago ⚡" if not man_tipo_obra and not man_pi and not man_livre and not man_especial else "🚧 Nome da Obra 🚧"
+    lbl_obra_estilo = 'class="lbl"' if not (man_tipo_obra or man_pi or man_livre or man_especial) else 'class="lbl text-red" style="background-color: #fef08a;"'
+    val_obra_estilo = 'class="val text-green"' if not (man_tipo_obra or man_pi or man_livre or man_especial) else 'class="val text-red" style="background-color: #fef08a; font-style: italic;"'
+    lbl_obra_texto = "⚡ Obra Relampago ⚡" if not (man_tipo_obra or man_pi or man_livre or man_especial) else "🚧 Nome da Obra 🚧"
     
     st.markdown(f"""
     <div class="eh">📝 CRIAÇÃO DA NOTA SGO 📝</div>
