@@ -23,8 +23,8 @@ st.markdown("""
     .et { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background-color: white; margin-bottom: 15px; border-radius: 0 0 4px 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);}
     .et td { border: 1px solid #e2e8f0; padding: 4px 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; height: 26px; vertical-align: middle; }
     
-    .lbl { width: 35%; background-color: #f8fafc; color: #475569; font-weight: 600;}
-    .val { width: 65%; background-color: #ffffff; color: #0f172a; font-weight: 700; text-transform: uppercase; }
+    .lbl { width: 38%; background-color: #f8fafc; color: #475569; font-weight: 600; white-space: nowrap;}
+    .val { width: 62%; background-color: #ffffff; color: #0f172a; font-weight: 700; text-transform: uppercase; }
     
     /* Cores de Texto Profissionais */
     .text-blue { color: #2563eb !important; }
@@ -175,7 +175,7 @@ with c2:
         <tr><td class="lbl">Instalação CCS</td><td class="val">{instalacao}</td></tr>
         <tr><td class="lbl">FASE</td><td class="val">{fase}</td></tr>
         <tr><td class="lbl">Tipo de Obra</td><td class="val">{tipo_obra_sisco}</td></tr>
-        <tr><td class="lbl">Data de Aber</td><td class="val">{data_abertura}</td></tr>
+        <tr><td class="lbl">Data Abertura</td><td class="val">{data_abertura}</td></tr>
         <tr><td class="lbl">---</td><td class="val"></td></tr>
         <tr><td class="lbl text-blue">LAT</td><td class="val">{lat}</td></tr>
         <tr><td class="lbl text-blue">LONG</td><td class="val">{lon}</td></tr>
@@ -229,7 +229,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         tipo_nota_parceiro = str(r_dados.get('Tipo de NS|Parceiro', ''))
         responsavel_obra = str(r_dados.get('Resp. Obra', ''))
         
-        # Limpando o .0 da quantidade de dias
         qtd_dias = str(r_dados.get('Qtd dias', '')).replace('.0', '')
         data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({qtd_dias} DIAS)"
         
@@ -242,7 +241,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         gerente = str(dados_pi.iloc[0, col_idx])
         executivo = str(dados_pi.iloc[0, col_idx + 1])
         empresa = str(dados_pi.iloc[0, col_idx + 2])
-        # Limpando o .0 do Contrato
         contrato = str(dados_pi.iloc[0, col_idx + 3]).replace('.0', '')
         tecnico = str(dados_pi.iloc[0, col_idx + 4])
         
@@ -312,17 +310,17 @@ with c3:
     st.markdown(f"""
     <div class="eh">📝 CRIAÇÃO DA NOTA SGO 📝</div>
     <table class="et">
-        <tr><td class="lbl">Tipo Nota | Parc</td><td class="val text-red" style="font-size: 11px;">{tipo_nota_parceiro}</td></tr>
+        <tr><td class="lbl">Tipo Nota | Parceiro</td><td class="val text-red" style="font-size: 11px;">{tipo_nota_parceiro}</td></tr>
         <tr><td {lbl_obra_estilo} style="font-size: 11px;">{lbl_obra_texto}</td><td {val_obra_estilo}>{obra_relampago_formatada}</td></tr>
         <tr><td class="lbl">Regional Sul</td><td class="val">{regional_formatado}</td></tr>
         <tr><td class="lbl">Cidade</td><td class="val">{cidade_auto}</td></tr>
-        <tr><td class="lbl">Área Responsá</td><td class="val">{area_resp}</td></tr>
+        <tr><td class="lbl">Área Responsável</td><td class="val">{area_resp}</td></tr>
         <tr><td class="lbl">Cliente</td><td class="val">{cliente_auto}</td></tr>
         <tr><td class="lbl">Endereço</td><td class="val">{endereco_auto}</td></tr>
         <tr><td class="lbl">PI</td><td class="val text-blue" style="font-style: italic;">{pi_ativo}</td></tr>
         <tr><td class="lbl">Gerente</td><td class="val">{gerente}</td></tr>
         <tr><td class="lbl">Executivo</td><td class="val">{executivo}</td></tr>
-        <tr><td class="lbl">Responsavel O</td><td class="val text-blue" style="font-size: 11px;">{responsavel_obra}</td></tr>
+        <tr><td class="lbl">Responsável Obra</td><td class="val text-blue" style="font-size: 11px;">{responsavel_obra}</td></tr>
         <tr><td class="lbl">Valor Previsto</td><td class="val text-green">{valor_previsto}</td></tr>
     </table>
     
