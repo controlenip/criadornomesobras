@@ -85,14 +85,15 @@ with c1:
     
 solicitacoes = [s.strip() for s in sols_input.split('\n') if s.strip()]
 
-# Variáveis Padrão
+# Variáveis Padrão corrigidas (reg_raw adicionada aqui)
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, regional_formatado, obs = "", "", "", "", "", ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
-responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
+responsavel_obra, tipo_nota_parceiro, valor_previsto, reg_raw = "", "", "", ""
 obra_relampago_formatada = ""
 descricoes_html = ""
 nomes_obras_html = ""
+obra_especial = "Normal"
 
 # Extração dos dados automáticos da primeira nota colada
 if solicitacoes and (not df_sisco.empty or not df_notas.empty):
@@ -221,7 +222,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
     if not dados_pi.empty:
         r_dados = dados_pi.iloc[0]
         
-        # Puxa os Parceiros e Valores baseados no PI ATIVO!
         tipo_nota_parceiro = str(r_dados.get('Tipo de NS|Parceiro', ''))
         responsavel_obra = str(r_dados.get('Resp. Obra', ''))
         data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({str(r_dados.get('Qtd dias', ''))} DIAS)"
@@ -232,7 +232,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
             total_val = 30000 * (len(solicitacoes) if solicitacoes else 1)
         valor_previsto = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         
-        # Puxa os Gerentes e Executivos
         gerente = str(dados_pi.iloc[0, col_idx])
         executivo = str(dados_pi.iloc[0, col_idx + 1])
         empresa = str(dados_pi.iloc[0, col_idx + 2])
@@ -248,7 +247,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
 # ==========================================
 # 5. GERADOR EM MASSA DOS NOMES
 # ==========================================
-# Define os Prefixos (Prioriza o Manual, se vazio usa o Auto)
 pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
 pref_id = man_id.split('-')[0] if man_id else "NS"
@@ -272,7 +270,6 @@ for sol in solicitacoes:
         cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
         if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
         
-        # Resolve Prefixos Dinâmicos da Obra Específica
         pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
         val_sol_final = man_sol if man_sol else sol
         val_livre_final = man_livre if man_livre else cli_sol.replace(" ", "-")[:15]
@@ -280,7 +277,6 @@ for sol in solicitacoes:
         desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
         nome_str = f"{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
         
-        # Pega a string calculada da primeira nota para jogar na Coluna 3
         if sol == solicitacoes[0]:
             obra_relampago_formatada = nome_str
     else:
@@ -295,7 +291,6 @@ linhas_restantes = 25 - len(solicitacoes)
 for _ in range(max(linhas_restantes, 0)):
     descricoes_html += '<div class="desc-row"></div>\n'
     nomes_obras_html += '<div class="desc-row"></div>\n'
-
 
 # ==========================================
 # 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
