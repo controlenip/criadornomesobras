@@ -91,11 +91,11 @@ with c1:
     
 solicitacoes = [s.strip() for s in sols_input.split('\n') if s.strip()]
 
-# Variáveis Padrão
+# Variáveis Padrão 100% vazias
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
-cidade_auto, cliente_auto, endereco_auto, area_resp, regional_formatado, obs = "", "", "", "", "", ""
+cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
-responsavel_obra, tipo_nota_parceiro, valor_previsto, reg_raw = "", "", "", ""
+responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
 obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
 obra_especial = "Normal"
 
@@ -117,11 +117,9 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
-        # Padroniza FASE para "MO" caso esteja Não Especificada
         fase = str(r_sisco.get('Tipo de Carga', 'MO')).upper() if r_sisco is not None else "MO"
         if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase: fase = "MO"
             
-        # Extração de Tipo de Obra idêntico à fórmula do Excel (Pega as primeiras 3 palavras dos Detalhes)
         tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
         if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
         tipo_obra_sisco = " ".join(tipo_obra_raw.replace("-", " ").split()[:3])
@@ -202,23 +200,38 @@ with c2:
         man_sol = criar_linha_input("Solicitação", "text", "i6")
         man_livre = criar_linha_input("Escrita Livre", "text", "i7")
 
+
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS (OVERRIDE MANUAL)
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
 
-col_idx = 4
-regional_formatado = "CM04-IMPERATRIZ"
-if "SUL" in reg_raw: 
-    regional_formatado = "CM04-IMPERATRIZ"; col_idx = 14
-elif "CENTRO" in reg_raw: 
-    regional_formatado = "CM03-BACABAL"; col_idx = 19
-elif "LESTE" in reg_raw: 
-    regional_formatado = "CM02-TIMON"; col_idx = 24
-elif "NORTE" in reg_raw: 
-    regional_formatado = "CM01-SAO LUIS"; col_idx = 4
-elif "NOROESTE" in reg_raw: 
-    regional_formatado = "CM01-PINHEIRO"; col_idx = 9
+# Definição segura das regionais que inicia VAZIA!
+regional_formatado = ""
+regional_label = "Regional"
+col_idx = 0
+
+if reg_raw:
+    if "SUL" in reg_raw: 
+        regional_formatado = "CM04-IMPERATRIZ"
+        col_idx = 14
+        regional_label = "Regional Sul"
+    elif "CENTRO" in reg_raw: 
+        regional_formatado = "CM03-BACABAL"
+        col_idx = 19
+        regional_label = "Regional Centro"
+    elif "LESTE" in reg_raw: 
+        regional_formatado = "CM02-TIMON"
+        col_idx = 24
+        regional_label = "Regional Leste"
+    elif "NORTE" in reg_raw: 
+        regional_formatado = "CM01-SAO LUIS"
+        col_idx = 4
+        regional_label = "Regional Norte"
+    elif "NOROESTE" in reg_raw: 
+        regional_formatado = "CM01-PINHEIRO"
+        col_idx = 9
+        regional_label = "Regional Noroeste"
 
 area_resp = ""
 if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
@@ -226,7 +239,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
     if not dados_pi.empty:
         r_dados = dados_pi.iloc[0]
         
-        # AQUI ESTÁ O SEGREDO: A área responsável agora cruza da aba Dados!
         area_resp_nova = str(r_dados.get('Tipo', ''))
         if area_resp_nova.lower() != 'nan' and area_resp_nova != "":
             area_resp = area_resp_nova.upper()
@@ -243,17 +255,19 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
             total_val = 30000 * (len(solicitacoes) if solicitacoes else 1)
         valor_previsto = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         
-        gerente = str(dados_pi.iloc[0, col_idx])
-        executivo = str(dados_pi.iloc[0, col_idx + 1])
-        empresa = str(dados_pi.iloc[0, col_idx + 2])
-        contrato = str(dados_pi.iloc[0, col_idx + 3]).replace('.0', '')
-        tecnico = str(dados_pi.iloc[0, col_idx + 4])
-        
-        if gerente.lower() == 'nan': gerente = ""
-        if executivo.lower() == 'nan': executivo = ""
-        if empresa.lower() == 'nan': empresa = ""
-        if contrato.lower() == 'nan': contrato = ""
-        if tecnico.lower() == 'nan': tecnico = ""
+        # Só preenche equipe (gerente, etc) se houver uma região identificada
+        if col_idx > 0:
+            gerente = str(dados_pi.iloc[0, col_idx])
+            executivo = str(dados_pi.iloc[0, col_idx + 1])
+            empresa = str(dados_pi.iloc[0, col_idx + 2])
+            contrato = str(dados_pi.iloc[0, col_idx + 3]).replace('.0', '')
+            tecnico = str(dados_pi.iloc[0, col_idx + 4])
+            
+            if gerente.lower() == 'nan': gerente = ""
+            if executivo.lower() == 'nan': executivo = ""
+            if empresa.lower() == 'nan': empresa = ""
+            if contrato.lower() == 'nan': contrato = ""
+            if tecnico.lower() == 'nan': tecnico = ""
 
 if not area_resp: area_resp = ""
 
@@ -319,7 +333,7 @@ with c3:
     <table class="et">
         <tr><td class="lbl">Tipo Nota | Parceiro</td><td class="val text-red" style="font-size: 11px;">{tipo_nota_parceiro}</td></tr>
         <tr><td {lbl_obra_estilo} style="font-size: 11px;">{lbl_obra_texto}</td><td {val_obra_estilo}>{obra_relampago_formatada}</td></tr>
-        <tr><td class="lbl">Regional Sul</td><td class="val">{regional_formatado}</td></tr>
+        <tr><td class="lbl">{regional_label}</td><td class="val">{regional_formatado}</td></tr>
         <tr><td class="lbl">Cidade</td><td class="val">{cidade_auto}</td></tr>
         <tr><td class="lbl">Área Responsável</td><td class="val">{area_resp}</td></tr>
         <tr><td class="lbl">Cliente</td><td class="val">{cliente_auto}</td></tr>
