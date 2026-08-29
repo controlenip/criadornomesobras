@@ -19,14 +19,20 @@ def carregar_bancos_de_dados(file):
     """Carrega as abas do Excel para a memória (Pandas) de forma ultrarrápida."""
     xls = pd.ExcelFile(file)
     
-    # Carrega as abas principais
-    df_bi = pd.read_excel(xls, sheet_name='BI')
+    # Pula as 2 primeiras linhas em branco da aba BI
+    df_bi = pd.read_excel(xls, sheet_name='BI', header=2)
+    
+    # A aba Sisco já tem o cabeçalho na primeira linha (header=0 é o padrão)
     df_sisco = pd.read_excel(xls, sheet_name='Sisco')
-    df_dados = pd.read_excel(xls, sheet_name='Dados')
+    
+    # A aba Dados tem o cabeçalho real na segunda linha (header=1)
+    df_dados = pd.read_excel(xls, sheet_name='Dados', header=1)
     
     # Padroniza as colunas de chave (Nota CCS / Protocolo) para string para evitar erros de busca
-    if 'Nota CCS' in df_bi.columns: df_bi['Nota CCS'] = df_bi['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
-    if 'Nota CCS' in df_sisco.columns: df_sisco['Nota CCS'] = df_sisco['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
+    if 'Nota CCS' in df_bi.columns: 
+        df_bi['Nota CCS'] = df_bi['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
+    if 'Nota CCS' in df_sisco.columns: 
+        df_sisco['Nota CCS'] = df_sisco['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
     
     return df_bi, df_sisco, df_dados
 
@@ -46,14 +52,14 @@ if arquivo_bd:
 
     st.markdown("---")
     
-    # CAMPO DE BUSCA (Igual a célula A2 da aba Pacheco)
+    # CAMPO DE BUSCA
     solicitacao = st.text_input("🔍 Digite o número da Solicitação / Nota:", placeholder="Ex: 1080317771")
     
     if solicitacao:
         solicitacao = solicitacao.strip()
         
-        # LÓGICA DE BUSCA (Substitui os XLOOKUPs aninhados)
-        # Tenta achar na aba BI primeiro
+        # LÓGICA DE BUSCA (Substitui os XLOOKUPs aninhados do Excel)
+        # Tenta achar na aba BI primeiro, se não achar, procura no Sisco
         resultado_bi = df_bi[df_bi['Nota CCS'] == solicitacao]
         resultado_sisco = df_sisco[df_sisco['Nota CCS'] == solicitacao]
         
@@ -95,7 +101,7 @@ if arquivo_bd:
             # Geração das Strings SGO
             descricao_sgo = f"{solicitacao}-{cliente}, CC-{cc}."
             
-            # Layout da Tela parecido com a Imagem (Painéis verdes e pretos)
+            # Layout da Tela
             col1, col2, col3 = st.columns([1, 1.5, 1])
             
             with col1:
@@ -115,14 +121,14 @@ if arquivo_bd:
                 st.code(descricao_sgo, language="text")
                 
                 st.markdown("### 🚧 NOME DA OBRA")
-                # Simulando a montagem complexa do nome
+                # Montagem complexa do nome do projeto
                 nome_cliente_curto = str(cliente).replace(" ", "-")[:15]
                 sigla_mun = municipio_limpo[:3] if municipio_limpo else "XXX"
                 nome_obra = f"CT-UNR-{sigla_mun}-NS-{solicitacao}-{nome_cliente_curto}"
                 st.code(nome_obra, language="text")
                 
             st.markdown("### 📜 MAIS OBSERVAÇÕES ACRESCENTAR NA NOTA")
-            # Área de texto parecida com o retângulo cinza da imagem
+            # Área de texto
             st.text_area("Observações extraídas (Backoffice/Sisco/BI):", value=dados_extraidos['Texto'], height=150)
             
         else:
