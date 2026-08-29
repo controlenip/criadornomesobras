@@ -81,7 +81,7 @@ if arquivo_bd:
         if 'TIPO DE OBRA' in df_dados.columns: lista_tipos_obra = sorted(df_dados['TIPO DE OBRA'].dropna().unique().tolist())
         if 'PI' in df_dados.columns: lista_pi = sorted(df_dados['PI'].dropna().unique().tolist())
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
-        if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted(df_dados['ID DO NUMERO'].dropna().unique().tolist())
+        if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted([str(x).replace('.0', '') for x in df_dados['ID DO NUMERO'].dropna().unique().tolist()])
 
 # Layout: 4 Colunas simulando o Excel
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
@@ -98,6 +98,7 @@ cidade_auto, cliente_auto, endereco_auto, area_resp, regional_formatado, obs = "
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto, reg_raw = "", "", "", ""
 obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
+obra_especial = "Normal"
 
 # Lógica principal de extração de dados
 if solicitacoes and (not df_sisco.empty or not df_notas.empty):
@@ -162,6 +163,7 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
 
+
 # ==========================================
 # 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
 # ==========================================
@@ -182,7 +184,6 @@ with c2:
     
     st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra 🚧</div>', unsafe_allow_html=True)
     
-    # --- FUNÇÃO PARA CRIAR LINHAS ALINHADAS PERFEITAMENTE ---
     def criar_linha_input(label, widget_type, key, options=None):
         cA, cB = st.columns([1, 2.5], gap="small")
         with cA:
@@ -194,7 +195,6 @@ with c2:
                 return st.text_input("", key=key, label_visibility="collapsed")
 
     with st.container():
-        # Novo campo de Obra Especial (vazio por padrão e com os motivos adicionados)
         man_especial = criar_linha_input("Obra Especial ?", "select", "i1", ["", "OE-Obras Juridicas e/ou Especiais", "EX-Exceções"])
         man_tipo_obra = criar_linha_input("Tipo de Obra", "select", "i2", [""] + lista_tipos_obra)
         man_pi = criar_linha_input("PI", "select", "i3", [""] + lista_pi)
@@ -228,7 +228,10 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         r_dados = dados_pi.iloc[0]
         tipo_nota_parceiro = str(r_dados.get('Tipo de NS|Parceiro', ''))
         responsavel_obra = str(r_dados.get('Resp. Obra', ''))
-        data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({str(r_dados.get('Qtd dias', ''))} DIAS)"
+        
+        # Limpando o .0 da quantidade de dias
+        qtd_dias = str(r_dados.get('Qtd dias', '')).replace('.0', '')
+        data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({qtd_dias} DIAS)"
         
         if pi_ativo in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"]:
             total_val = 7000 * (len(solicitacoes) if solicitacoes else 1)
@@ -239,7 +242,8 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         gerente = str(dados_pi.iloc[0, col_idx])
         executivo = str(dados_pi.iloc[0, col_idx + 1])
         empresa = str(dados_pi.iloc[0, col_idx + 2])
-        contrato = str(dados_pi.iloc[0, col_idx + 3])
+        # Limpando o .0 do Contrato
+        contrato = str(dados_pi.iloc[0, col_idx + 3]).replace('.0', '')
         tecnico = str(dados_pi.iloc[0, col_idx + 4])
         
         if gerente.lower() == 'nan': gerente = ""
@@ -251,7 +255,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
 # ==========================================
 # 5. GERADOR EM MASSA DOS NOMES
 # ==========================================
-# Identifica o prefixo se uma obra especial foi escolhida ("OE" ou "EX")
 pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
 pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
@@ -281,8 +284,6 @@ for sol in solicitacoes:
         val_livre_final = man_livre if man_livre else cli_sol.replace(" ", "-")[:15]
         
         desc_str = f"{sol}-{cli_sol}, CC-{cc_sol}."
-        
-        # AQUI É ONDE O NOVO PREFIXO ENTRA (Ex: OE-CT-UNR...)
         nome_str = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final}"
         
         if sol == solicitacoes[0]:
