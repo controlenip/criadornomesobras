@@ -7,13 +7,12 @@ import base64
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
-# initial_sidebar_state="expanded" para a barra iniciar aberta
 st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    /* Aumentado o padding-top para 4.5rem para garantir que a logo não seja cortada no topo */
-    .block-container { padding-top: 4.5rem !important; padding-bottom: 2rem !important; }
+    /* Ajuste para a barra lateral nativa aparecer corretamente e dar respiro no topo */
+    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
     html, body, [class*="css"] { font-size: 12px !important; }
     
     .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
@@ -73,33 +72,37 @@ def carregar_dados(file):
     except: df_dados = pd.DataFrame()
     return df_sisco, df_notas, df_dados
 
-
 # ==========================================
-# 2. LOGO NO TOPO, UPLOAD E LISTAS SUSPENSAS
+# 2. LOGO NO TOPO E DADOS PADRÃO
 # ==========================================
 
-# Inserção da Logo via HTML (Sem Zoom, tamanho perfeito, com margem extra no topo)
+# Inserção da Logo via HTML (Sem Zoom, tamanho perfeito e centralizado)
 if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
         b64_logo = base64.b64encode(image_file.read()).decode()
     
     st.markdown(f'''
-        <div style="text-align: center; margin-top: 10px; margin-bottom: 25px;">
+        <div style="text-align: center; margin-bottom: 25px;">
             <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
         </div>
     ''', unsafe_allow_html=True)
 
+# Listas Padrão extraídas da sua planilha (Carregam sempre, garantindo que nunca fiquem vazias)
+lista_tipos_obra = ['AF-AMPLIAÇÃO DE FASE', 'AP-AMPLIAÇÃO DE POTENCIA', 'CA-CONSTRUÇÃO DE AL', 'CT-CONSTRUÇÃO DE RD', 'DV-DIVISÃO DE CIRCUITO', 'FC-FLEXIBILIZAÇÃO DE CIRCUITO', 'IE-INSTALAÇÃO DE EQUIPAMENTOS', 'IT-INSTALAÇÃO DE TRANSFORMADORES', 'ME-MELHORIA DE REDE DE DISTRIBUIÇÃO', 'MI-MICROSSISTEMA ISOLADO DE GERAÇÃO DE ENERGIA', 'MP-REALOCAÇÃO DE POSTE', 'MT-REALOCAÇÃO DE TRANSFORMADORES RD', 'RC-RECAPACITAÇÃO DE CONDUTORES', 'RE-RECAPACITAÇÃO DE EQUIPAMENTOS DE RD', 'RF-RECAPACITAÇÃO DE C,FA, C,FU E PR', 'RP-RECAPACITAÇÃO DE POSTES', 'RT-RECAPACITAÇÃO DE TRANSFORMADOR DE RD', 'SI-SISTEMA INDIVIDUAL DE GERAÇÃO DE ENERGIA', 'TE-REALOCAÇÃO DE EQUIPAMENTOS']
+lista_pi = ['ASC', 'ATV', 'BCP', 'BRE', 'BRT', 'CCF', 'DIF', 'DIS', 'EME', 'ERD', 'EUR', 'FIM', 'INC', 'INR', 'LPT', 'MBT', 'MCJ', 'MCR', 'MEL', 'MGD', 'MMT', 'MRS', 'MSE', 'MTP', 'NIV', 'OCP', 'ODS', 'PMC', 'REF', 'REG', 'SEG', 'SEQ', 'SID', 'SLS', 'SMC', 'TRI', 'UNI', 'UNP', 'UNR']
+lista_mun = ['AAM-ALTO ALEGRE DO MARANHAO', 'AAP-ALTO ALEGRE DO PINDARE', 'ACL-ACAILANDIA', 'ACT-ALCANTARA', 'ADA-ALDEIAS ALTAS', 'ADM-AGUA DOCE DO MARANHAO', 'AFC-AFONSO CUNHA', 'ALM-ALTAMIRA DO MARANHAO', 'ALP-ALTO PARNAIBA', 'AME-ARAME', 'AMM-AMAPA DO MARANHAO', 'AMO-AMARANTE DO MARANHAO', 'ANA-ANAJATUBA', 'ANS-ANAPURUS', 'API-APICUM-ACU', 'ARA-ARAGUANA', 'ARI-ARARI', 'ARS-ARAIOSES', 'AXX-AXIXA', 'BAC-BACURI', 'BBR-BURITI BRAVO', 'BCA-BACABEIRA', 'BCB-BACABAL', 'BCP-BURITICUPU', 'BCT-BACURITUBA', 'BDC-BARRA DO CORDA', 'BEM-BERNARDO DO MEARIM', 'BGU-BELAGUA', 'BIV-BURITI', 'BJA-BREJO DE AREIA', 'BJD-BOM JARDIM', 'BJO-BREJO', 'BJS-BOM JESUS DAS SELVAS', 'BJU-BARAO DE GRAJAU', 'BLE-BENEDITO LEITE', 'BLS-BALSAS', 'BLU-BOM LUGAR', 'BQM-BEQUIMAO', 'BRN-BARREIRINHAS', 'BUT-BURITIRANA', 'BVG-BOA VISTA DO GURUPI', 'BVM-BELA VISTA DO MARANHAO', 'CAM-CAMPESTRE DO MARANHAO', 'CAN-CANDIDO MENDES', 'CAR-CAROLINA', 'CDL-CEDRAL', 'CGE-CENTRO DO GUILHERME', 'CGR-CACHOEIRA GRANDE', 'CHA-CHAPADINHA', 'CHE-CANTANHEDE', 'CID-CIDELANDIA', 'CJI-CAJARI', 'CJO-CAJAPIO', 'CLA-CONCEICAO DO LAGO-ACU', 'CMA-CENTRAL DO MARANHAO', 'CNM-CENTRO NOVO DO MARANHAO', 'CNO-COELHO NETO', 'COL-COLINAS', 'COO-CODO', 'CPN-CAPINZAL DO NORTE', 'CRA-COROATA', 'CRP-CURURUPU', 'CTP-CARUTAPERA', 'CXS-CAXIAS', 'DAV-DAVINOPOLIS', 'DBA-DUQUE BACELAR', 'DPO-DOM PEDRO', 'ESP-ESPERANTINOPOLIS', 'ETE-ESTREITO', 'FFA-FERNANDO FALCAO', 'FNM-FEIRA NOVA DO MARANHAO', 'FOR-FORTUNA', 'FSN-FORMOSA DA SERRA NEGRA', 'FTN-FORTALEZA DOS NOGUEIRAS', 'GDV-GODOFREDO VIANA', 'GEB-GOVERNADOR EUGENIO BARROS', 'GEL-GOVERNADOR EDISON LOBAO', 'GJU-GRAJAU', 'GLR-GOVERNADOR LUIZ ROCHA', 'GNB-GOVERNADOR NEWTON BELLO', 'GNF-GOVERNADOR NUNES FREIRE', 'GOA-GOVERNADOR ARCHER', 'GOD-GONCALVES DIAS', 'GRA-GRACA ARANHA', 'GUI-GUIMARAES', 'HUC-HUMBERTO DE CAMPOS', 'ICT-ICATU', 'IGG-IGARAPE GRANDE', 'IGM-IGARAPE DO MEIO', 'IPG-ITAIPAVA DO GRAJAU', 'IPZ-IMPERATRIZ', 'ITG-ITINGA DO MARANHAO', 'ITM-ITAPECURU MIRIM', 'JAT-JATOBA', 'JEV-JENIPAPO DOS VIEIRAS', 'JLB-JOAO LISBOA', 'JOS-JOSELANDIA', 'JUM-JUNCO DO MARANHAO', 'LAM-LAGOA DO MATO', 'LAN-LAJEADO NOVO', 'LGJ-LAGO DO JUNCO', 'LGM-LAGOA GRANDE DO MARANHAO', 'LGR-LAGO DOS RODRIGUES', 'LGV-LAGO VERDE', 'LIC-LIMA CAMPOS', 'LPD-LAGO DA PEDRA', 'LRT-LORETO', 'LUD-LUIS DOMINGUES', 'MAA-MAGALHAES DE ALMEIDA', 'MAL-MONTES ALTOS', 'MHO-MARANHAOZINHO', 'MIL-MILAGRES DO MARANHAO', 'MIR-MIRINZAL', 'MJS-MARAJA DO SENA', 'MME-MARACACUME', 'MON-MONCAO', 'MRA-MIRANDA DO NORTE', 'MRD-MIRADOR', 'MRR-MORROS', 'MTA-MATINHA', 'MTN-MATOES DO NORTE', 'MTR-MATA ROMA', 'MTS-MATOES', 'NCO-NOVA COLINAS', 'NIO-NOVA IORQUE', 'NRO-NINA RODRIGUES', 'NVO-NOVA OLINDA DO MARANHAO', "ODC-OLHO D'AGUA DAS CUNHAS", 'ONO-OLINDA NOVA DO MARANHAO', 'PAB-PASTOS BONS', 'PAF-PASSAGEM FRANCA', 'PAR-PAULO RAMOS', 'PCL-PACO DO LUMIAR', 'PCZ-PRIMEIRA CRUZ', 'PDR-PEDRO DO ROSARIO', 'PDS-PEDREIRAS', 'PDT-PRESIDENTE DUTRA', 'PFO-PORTO FRANCO', 'PHO-PINHEIRO', 'PIO-PIO XII', 'PJU-PRESIDENTE JUSCELINO', 'PMA-PALMEIRANDIA', 'PME-PRESIDENTE MEDICI', 'PMI-PINDARE-MIRIM', 'PNA-PARNARAMA', 'PNL-PENALVA', 'PNV-PAULINO NEVES', 'PPE-PIRAPEMAS', 'PPS-POCAO DE PEDRAS', 'PRB-PARAIBANO', 'PRM-PERI MIRIM', 'PRO-PERITORO', 'PSY-PRESIDENTE SARNEY', 'PTR-PORTO RICO DO MARANHAO', 'PVA-PRESIDENTE VARGAS', 'RAP-RAPOSA', 'RCO-RIACHAO', 'RFQ-RIBAMAR FIQUENE', 'RSO-ROSARIO', 'SAL-SANTO ANTONIO DOS LOPES', 'SAM-SANTO AMARO DO MARANHAO', 'SAR-SAO ROBERTO', 'SBN-SAO BERNARDO', 'SBR-SAO BENEDITO DO RIO PRETO', 'SBT-SAO BENTO', 'SBZ-SAO RAIMUNDO DO DOCA BEZERRA', 'SDM-SAO DOMINGOS DO MARANHAO', 'SDZ-SAO DOMINGOS DO AZEITAO', 'SER-SERRANO DO MARANHAO', 'SFB-SAO FELIX DE BALSAS', 'SFH-SAO FRANCISCO DO MARANHAO', 'SFJ-SAO FRANCISCO DO BREJAO', 'SFM-SANTA FILOMENA DO MARANHAO', 'SGM-SAO LUIS GONZAGA DO MARANHAO', 'SHL-SANTA HELENA', 'SJA-SAO JOAO BATISTA', 'SJB-SAO JOSE DOS BASILIOS', 'SJC-SAO JOAO DO CARU', 'SJI-SAO JOAO DO PARAISO', 'SJP-SAO JOAO DOS PATOS', 'SJR-SAO JOSE DE RIBAMAR', 'SJS-SAO JOAO DO SOTER', 'SLR-SENADOR LA ROCQUE', 'SLS-SAO LUIS', 'SMB-SAMBAIBA', 'SMH-SANTANA DO MARANHAO', 'SMT-SAO MATEUS DO MARANHAO', 'SNO-SITIO NOVO', 'SPB-SAO PEDRO DA AGUA BRANCA', 'SPC-SAO PEDRO DOS CRENTES', 'SQM-SANTA QUITERIA DO MARANHAO', 'SRI-SANTA RITA', 'SRM-SAO RAIMUNDO DAS MANGABEIRAS', 'STH-SATUBINHA', 'STI-SANTA INES', 'STL-SANTA LUZIA', 'STP-SANTA LUZIA DO PARUA', 'SUN-SUCUPIRA DO NORTE', 'SUR-SUCUPIRA DO RIACHAO', 'SVF-SAO VICENTE FERRER', 'SXC-SENADOR ALEXANDRE COSTA', 'TBR-TIMBIRAS', 'TFG-TASSO FRAGOSO', 'TMO-TIMON', 'TRL-TURILANDIA', 'TTA-TUTOIA', 'TTM-TUNTUM', 'TUF-TUFILANDIA', 'TUR-TURIACU', 'TVA-TRIZIDELA DO VALE', 'UBS-URBANO SANTOS', 'VFR-VITORINO FREIRE', 'VGG-VARGEM GRANDE', 'VNA-VIANA', 'VNM-VILA NOVA DOS MARTIRIOS', 'VTM-VITORIA DO MEARIM', 'ZDC-ZE DOCA']
+lista_id = ['AL-Alimentador Tronco', 'BA-Barramento', 'CC-Conta Contrato', 'CO-Numero Componente', 'ID-IDENTIFICADOR', 'NR-Nota de Reclamação', 'NS-Nota CCS', 'OC-Ocorrência', 'OS-Ordem de Serviço', 'PF-CPF do cliente', 'PG-Ponto Geográfico', 'PT-Parecer Técnico', 'TR-Tempo Real']
 
 arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
 df_sisco, df_notas, df_dados = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-lista_tipos_obra, lista_pi, lista_mun, lista_id = [], [], [], []
 
 if arquivo_bd:
     with st.spinner("Carregando banco de dados..."):
         df_sisco, df_notas, df_dados = carregar_dados(arquivo_bd)
         
     if not df_dados.empty:
+        # Se os dados existirem na planilha enviada, eles substituem as listas padrão
         if 'TIPO DE OBRA' in df_dados.columns: lista_tipos_obra = sorted(df_dados['TIPO DE OBRA'].dropna().unique().tolist())
         if 'PI' in df_dados.columns: lista_pi = sorted(df_dados['PI'].dropna().unique().tolist())
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
