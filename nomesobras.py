@@ -248,7 +248,7 @@ with c2:
         man_mun = criar_linha_input("Municipio", "select", "i4", [""] + lista_mun)
         man_id = criar_linha_input("ID do Numero", "select", "i5", [""] + lista_id)
         man_sol = criar_linha_input("Solicitação", "text", "i6")
-        man_livre = criar_linha_input("Escrita Livre / Cliente", "text", "i7")
+        man_livre = criar_linha_input("Escrita Livre", "text", "i7")
         man_endereco = criar_linha_input("Endereço", "text", "i8")
         man_cc = criar_linha_input("Conta Contrato", "text", "i9")
         
