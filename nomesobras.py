@@ -11,8 +11,7 @@ st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️"
 
 st.markdown("""
 <style>
-    /* Ajuste para a barra lateral nativa aparecer corretamente e dar respiro no topo */
-    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+    .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
     html, body, [class*="css"] { font-size: 12px !important; }
     
     .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
@@ -29,7 +28,9 @@ st.markdown("""
     .text-red { color: #dc2626 !important; }
     .text-green { color: #059669 !important; }
     
-    .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 200px; white-space: pre-wrap; line-height: 1.4; overflow-y: auto; border-radius: 0 0 4px 4px;}
+    /* Quadro de observações atualizado para crescer automaticamente com o texto */
+    .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 80px; height: auto; white-space: pre-wrap; line-height: 1.4; border-radius: 0 0 4px 4px;}
+    
     .desc-row { border: 1px solid #cbd5e1; height: 26px; width: 100%; margin-bottom: 4px; padding: 4px 8px; font-weight: 600; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
     
     .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
@@ -40,12 +41,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Função para resetar os campos manuais
+# Função para resetar os campos manuais e zerar a lista de obras
 def limpar_campos_manuais():
     for i in range(1, 10):
         chave = f"i{i}"
         if chave in st.session_state:
             st.session_state[chave] = ""
+    st.session_state.num_notas = 1
+    for k in list(st.session_state.keys()):
+        if k.startswith("nota_input_"):
+            st.session_state[k] = ""
 
 # Função para adicionar novo campo de nota dinamicamente
 def add_nota():
@@ -76,18 +81,23 @@ def carregar_dados(file):
 # 2. LOGO NO TOPO E DADOS PADRÃO
 # ==========================================
 
-# Inserção da Logo via HTML (Sem Zoom, tamanho perfeito e centralizado)
+st.markdown("<br>", unsafe_allow_html=True) 
 if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
         b64_logo = base64.b64encode(image_file.read()).decode()
     
     st.markdown(f'''
-        <div style="text-align: center; margin-bottom: 25px;">
+        <div style="text-align: center; margin-bottom: 10px;">
             <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
         </div>
     ''', unsafe_allow_html=True)
 
-# Listas Padrão extraídas da sua planilha (Carregam sempre, garantindo que nunca fiquem vazias)
+col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
+with col_btn2:
+    st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
 lista_tipos_obra = ['AF-AMPLIAÇÃO DE FASE', 'AP-AMPLIAÇÃO DE POTENCIA', 'CA-CONSTRUÇÃO DE AL', 'CT-CONSTRUÇÃO DE RD', 'DV-DIVISÃO DE CIRCUITO', 'FC-FLEXIBILIZAÇÃO DE CIRCUITO', 'IE-INSTALAÇÃO DE EQUIPAMENTOS', 'IT-INSTALAÇÃO DE TRANSFORMADORES', 'ME-MELHORIA DE REDE DE DISTRIBUIÇÃO', 'MI-MICROSSISTEMA ISOLADO DE GERAÇÃO DE ENERGIA', 'MP-REALOCAÇÃO DE POSTE', 'MT-REALOCAÇÃO DE TRANSFORMADORES RD', 'RC-RECAPACITAÇÃO DE CONDUTORES', 'RE-RECAPACITAÇÃO DE EQUIPAMENTOS DE RD', 'RF-RECAPACITAÇÃO DE C,FA, C,FU E PR', 'RP-RECAPACITAÇÃO DE POSTES', 'RT-RECAPACITAÇÃO DE TRANSFORMADOR DE RD', 'SI-SISTEMA INDIVIDUAL DE GERAÇÃO DE ENERGIA', 'TE-REALOCAÇÃO DE EQUIPAMENTOS']
 lista_pi = ['ASC', 'ATV', 'BCP', 'BRE', 'BRT', 'CCF', 'DIF', 'DIS', 'EME', 'ERD', 'EUR', 'FIM', 'INC', 'INR', 'LPT', 'MBT', 'MCJ', 'MCR', 'MEL', 'MGD', 'MMT', 'MRS', 'MSE', 'MTP', 'NIV', 'OCP', 'ODS', 'PMC', 'REF', 'REG', 'SEG', 'SEQ', 'SID', 'SLS', 'SMC', 'TRI', 'UNI', 'UNP', 'UNR']
 lista_mun = ['AAM-ALTO ALEGRE DO MARANHAO', 'AAP-ALTO ALEGRE DO PINDARE', 'ACL-ACAILANDIA', 'ACT-ALCANTARA', 'ADA-ALDEIAS ALTAS', 'ADM-AGUA DOCE DO MARANHAO', 'AFC-AFONSO CUNHA', 'ALM-ALTAMIRA DO MARANHAO', 'ALP-ALTO PARNAIBA', 'AME-ARAME', 'AMM-AMAPA DO MARANHAO', 'AMO-AMARANTE DO MARANHAO', 'ANA-ANAJATUBA', 'ANS-ANAPURUS', 'API-APICUM-ACU', 'ARA-ARAGUANA', 'ARI-ARARI', 'ARS-ARAIOSES', 'AXX-AXIXA', 'BAC-BACURI', 'BBR-BURITI BRAVO', 'BCA-BACABEIRA', 'BCB-BACABAL', 'BCP-BURITICUPU', 'BCT-BACURITUBA', 'BDC-BARRA DO CORDA', 'BEM-BERNARDO DO MEARIM', 'BGU-BELAGUA', 'BIV-BURITI', 'BJA-BREJO DE AREIA', 'BJD-BOM JARDIM', 'BJO-BREJO', 'BJS-BOM JESUS DAS SELVAS', 'BJU-BARAO DE GRAJAU', 'BLE-BENEDITO LEITE', 'BLS-BALSAS', 'BLU-BOM LUGAR', 'BQM-BEQUIMAO', 'BRN-BARREIRINHAS', 'BUT-BURITIRANA', 'BVG-BOA VISTA DO GURUPI', 'BVM-BELA VISTA DO MARANHAO', 'CAM-CAMPESTRE DO MARANHAO', 'CAN-CANDIDO MENDES', 'CAR-CAROLINA', 'CDL-CEDRAL', 'CGE-CENTRO DO GUILHERME', 'CGR-CACHOEIRA GRANDE', 'CHA-CHAPADINHA', 'CHE-CANTANHEDE', 'CID-CIDELANDIA', 'CJI-CAJARI', 'CJO-CAJAPIO', 'CLA-CONCEICAO DO LAGO-ACU', 'CMA-CENTRAL DO MARANHAO', 'CNM-CENTRO NOVO DO MARANHAO', 'CNO-COELHO NETO', 'COL-COLINAS', 'COO-CODO', 'CPN-CAPINZAL DO NORTE', 'CRA-COROATA', 'CRP-CURURUPU', 'CTP-CARUTAPERA', 'CXS-CAXIAS', 'DAV-DAVINOPOLIS', 'DBA-DUQUE BACELAR', 'DPO-DOM PEDRO', 'ESP-ESPERANTINOPOLIS', 'ETE-ESTREITO', 'FFA-FERNANDO FALCAO', 'FNM-FEIRA NOVA DO MARANHAO', 'FOR-FORTUNA', 'FSN-FORMOSA DA SERRA NEGRA', 'FTN-FORTALEZA DOS NOGUEIRAS', 'GDV-GODOFREDO VIANA', 'GEB-GOVERNADOR EUGENIO BARROS', 'GEL-GOVERNADOR EDISON LOBAO', 'GJU-GRAJAU', 'GLR-GOVERNADOR LUIZ ROCHA', 'GNB-GOVERNADOR NEWTON BELLO', 'GNF-GOVERNADOR NUNES FREIRE', 'GOA-GOVERNADOR ARCHER', 'GOD-GONCALVES DIAS', 'GRA-GRACA ARANHA', 'GUI-GUIMARAES', 'HUC-HUMBERTO DE CAMPOS', 'ICT-ICATU', 'IGG-IGARAPE GRANDE', 'IGM-IGARAPE DO MEIO', 'IPG-ITAIPAVA DO GRAJAU', 'IPZ-IMPERATRIZ', 'ITG-ITINGA DO MARANHAO', 'ITM-ITAPECURU MIRIM', 'JAT-JATOBA', 'JEV-JENIPAPO DOS VIEIRAS', 'JLB-JOAO LISBOA', 'JOS-JOSELANDIA', 'JUM-JUNCO DO MARANHAO', 'LAM-LAGOA DO MATO', 'LAN-LAJEADO NOVO', 'LGJ-LAGO DO JUNCO', 'LGM-LAGOA GRANDE DO MARANHAO', 'LGR-LAGO DOS RODRIGUES', 'LGV-LAGO VERDE', 'LIC-LIMA CAMPOS', 'LPD-LAGO DA PEDRA', 'LRT-LORETO', 'LUD-LUIS DOMINGUES', 'MAA-MAGALHAES DE ALMEIDA', 'MAL-MONTES ALTOS', 'MHO-MARANHAOZINHO', 'MIL-MILAGRES DO MARANHAO', 'MIR-MIRINZAL', 'MJS-MARAJA DO SENA', 'MME-MARACACUME', 'MON-MONCAO', 'MRA-MIRANDA DO NORTE', 'MRD-MIRADOR', 'MRR-MORROS', 'MTA-MATINHA', 'MTN-MATOES DO NORTE', 'MTR-MATA ROMA', 'MTS-MATOES', 'NCO-NOVA COLINAS', 'NIO-NOVA IORQUE', 'NRO-NINA RODRIGUES', 'NVO-NOVA OLINDA DO MARANHAO', "ODC-OLHO D'AGUA DAS CUNHAS", 'ONO-OLINDA NOVA DO MARANHAO', 'PAB-PASTOS BONS', 'PAF-PASSAGEM FRANCA', 'PAR-PAULO RAMOS', 'PCL-PACO DO LUMIAR', 'PCZ-PRIMEIRA CRUZ', 'PDR-PEDRO DO ROSARIO', 'PDS-PEDREIRAS', 'PDT-PRESIDENTE DUTRA', 'PFO-PORTO FRANCO', 'PHO-PINHEIRO', 'PIO-PIO XII', 'PJU-PRESIDENTE JUSCELINO', 'PMA-PALMEIRANDIA', 'PME-PRESIDENTE MEDICI', 'PMI-PINDARE-MIRIM', 'PNA-PARNARAMA', 'PNL-PENALVA', 'PNV-PAULINO NEVES', 'PPE-PIRAPEMAS', 'PPS-POCAO DE PEDRAS', 'PRB-PARAIBANO', 'PRM-PERI MIRIM', 'PRO-PERITORO', 'PSY-PRESIDENTE SARNEY', 'PTR-PORTO RICO DO MARANHAO', 'PVA-PRESIDENTE VARGAS', 'RAP-RAPOSA', 'RCO-RIACHAO', 'RFQ-RIBAMAR FIQUENE', 'RSO-ROSARIO', 'SAL-SANTO ANTONIO DOS LOPES', 'SAM-SANTO AMARO DO MARANHAO', 'SAR-SAO ROBERTO', 'SBN-SAO BERNARDO', 'SBR-SAO BENEDITO DO RIO PRETO', 'SBT-SAO BENTO', 'SBZ-SAO RAIMUNDO DO DOCA BEZERRA', 'SDM-SAO DOMINGOS DO MARANHAO', 'SDZ-SAO DOMINGOS DO AZEITAO', 'SER-SERRANO DO MARANHAO', 'SFB-SAO FELIX DE BALSAS', 'SFH-SAO FRANCISCO DO MARANHAO', 'SFJ-SAO FRANCISCO DO BREJAO', 'SFM-SANTA FILOMENA DO MARANHAO', 'SGM-SAO LUIS GONZAGA DO MARANHAO', 'SHL-SANTA HELENA', 'SJA-SAO JOAO BATISTA', 'SJB-SAO JOSE DOS BASILIOS', 'SJC-SAO JOAO DO CARU', 'SJI-SAO JOAO DO PARAISO', 'SJP-SAO JOAO DOS PATOS', 'SJR-SAO JOSE DE RIBAMAR', 'SJS-SAO JOAO DO SOTER', 'SLR-SENADOR LA ROCQUE', 'SLS-SAO LUIS', 'SMB-SAMBAIBA', 'SMH-SANTANA DO MARANHAO', 'SMT-SAO MATEUS DO MARANHAO', 'SNO-SITIO NOVO', 'SPB-SAO PEDRO DA AGUA BRANCA', 'SPC-SAO PEDRO DOS CRENTES', 'SQM-SANTA QUITERIA DO MARANHAO', 'SRI-SANTA RITA', 'SRM-SAO RAIMUNDO DAS MANGABEIRAS', 'STH-SATUBINHA', 'STI-SANTA INES', 'STL-SANTA LUZIA', 'STP-SANTA LUZIA DO PARUA', 'SUN-SUCUPIRA DO NORTE', 'SUR-SUCUPIRA DO RIACHAO', 'SVF-SAO VICENTE FERRER', 'SXC-SENADOR ALEXANDRE COSTA', 'TBR-TIMBIRAS', 'TFG-TASSO FRAGOSO', 'TMO-TIMON', 'TRL-TURILANDIA', 'TTA-TUTOIA', 'TTM-TUNTUM', 'TUF-TUFILANDIA', 'TUR-TURIACU', 'TVA-TRIZIDELA DO VALE', 'UBS-URBANO SANTOS', 'VFR-VITORINO FREIRE', 'VGG-VARGEM GRANDE', 'VNA-VIANA', 'VNM-VILA NOVA DOS MARTIRIOS', 'VTM-VITORIA DO MEARIM', 'ZDC-ZE DOCA']
@@ -102,7 +112,6 @@ if arquivo_bd:
         df_sisco, df_notas, df_dados = carregar_dados(arquivo_bd)
         
     if not df_dados.empty:
-        # Se os dados existirem na planilha enviada, eles substituem as listas padrão
         if 'TIPO DE OBRA' in df_dados.columns: lista_tipos_obra = sorted(df_dados['TIPO DE OBRA'].dropna().unique().tolist())
         if 'PI' in df_dados.columns: lista_pi = sorted(df_dados['PI'].dropna().unique().tolist())
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
@@ -116,16 +125,13 @@ c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 with c1:
     st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
     
-    # Caixa de Notas Associadas (Padrão: Marcada)
     st.markdown("<div style='padding: 8px 0px;'>", unsafe_allow_html=True)
     notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Estado para rastrear o número de campos
     if 'num_notas' not in st.session_state:
         st.session_state.num_notas = 1
 
-    # Lógica Inteligente de Reset: Se "Obra 1" for apagada, reseta tudo para 1 campo e limpa a memória das extras
     if 'nota_input_0' in st.session_state and st.session_state['nota_input_0'].strip() == "":
         st.session_state.num_notas = 1
         for k in list(st.session_state.keys()):
@@ -134,7 +140,6 @@ with c1:
 
     solicitacoes = []
     
-    # Renderiza os campos dinamicamente
     for i in range(st.session_state.num_notas):
         val = st.text_input(f"Obra {i+1}", key=f"nota_input_{i}", placeholder=f"Obra {i+1}...", label_visibility="collapsed")
         if val and val.strip():
@@ -166,7 +171,9 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
-        fase = str(r_sisco.get('Tipo de Carga', 'MO')).upper() if r_sisco is not None else "MO"
+        fase = str(r_sisco.get('FASE', 'MO')).upper() if r_sisco is not None else "MO"
+        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase:
+            fase = str(r_notas.get('FASE', 'MO')).upper() if r_notas is not None else "MO"
         if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
             
         tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
@@ -207,14 +214,12 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not reg_raw or reg_raw.lower() == 'nan': reg_raw = str(r_sisco.get('Regional', '')) if r_sisco is not None else ""
         reg_raw = reg_raw.upper()
         
-        # Extração de Observações 1 (INFORMAÇÕES) - Com fallbacks caso a nova base não tenha a coluna
         obs = str(r_sisco.get('INFORMAÇÕES', '')) if r_sisco is not None else ""
         if not obs or obs.lower() == 'nan': obs = str(r_notas.get('INFORMAÇÕES', '')) if r_notas is not None else ""
         if not obs or obs.lower() == 'nan': obs = str(r_sisco.get('Obs(última obs)', '')) if r_sisco is not None else ""
         if not obs or obs.lower() == 'nan': obs = str(r_notas.get('PONTO DE REFERENCIA', '')) if r_notas is not None else ""
         if obs.lower() == 'nan': obs = ""
 
-        # Extração de Observações 2 (INFORMAÇÕES EXTRAS)
         obs_extra = str(r_sisco.get('INFORMAÇÕES EXTRAS', '')) if r_sisco is not None else ""
         if not obs_extra or obs_extra.lower() == 'nan': obs_extra = str(r_notas.get('INFORMAÇÕES EXTRAS', '')) if r_notas is not None else ""
         if obs_extra.lower() == 'nan': obs_extra = ""
@@ -261,10 +266,6 @@ with c2:
         man_livre = criar_linha_input("Escrita Livre", "text", "i7")
         man_endereco = criar_linha_input("Endereço", "text", "i8")
         man_cc = criar_linha_input("Conta Contrato", "text", "i9")
-        
-        # Botão para zerar todos os campos manuais
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
 
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
@@ -406,7 +407,6 @@ else:
             
         descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
         
-        # Lógica de NOTAS ASSOCIADAS: Apenas a primeira ganha nome SGO, as outras ficam vazias para alinhamento
         if notas_associadas and idx > 0:
             nomes_obras_html += f'<div class="desc-row">&nbsp;</div>\n'
         else:
