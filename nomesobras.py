@@ -11,8 +11,7 @@ st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️"
 
 st.markdown("""
 <style>
-    /* Ajuste para a barra lateral nativa aparecer corretamente e dar respiro no topo */
-    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+    .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
     html, body, [class*="css"] { font-size: 12px !important; }
     
     .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
@@ -40,12 +39,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Função para resetar os campos manuais
+# Função para resetar os campos manuais e zerar a lista de obras
 def limpar_campos_manuais():
+    # Limpa selects e text inputs manuais
     for i in range(1, 10):
         chave = f"i{i}"
         if chave in st.session_state:
             st.session_state[chave] = ""
+    # Limpa as obras inseridas e reseta contador
+    st.session_state.num_notas = 1
+    for k in list(st.session_state.keys()):
+        if k.startswith("nota_input_"):
+            st.session_state[k] = ""
 
 # Função para adicionar novo campo de nota dinamicamente
 def add_nota():
@@ -76,16 +81,24 @@ def carregar_dados(file):
 # 2. LOGO NO TOPO E DADOS PADRÃO
 # ==========================================
 
+st.markdown("<br>", unsafe_allow_html=True) # Respiro no topo para prevenir corte
 # Inserção da Logo via HTML (Sem Zoom, tamanho perfeito e centralizado)
 if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
         b64_logo = base64.b64encode(image_file.read()).decode()
     
     st.markdown(f'''
-        <div style="text-align: center; margin-bottom: 25px;">
+        <div style="text-align: center; margin-bottom: 10px;">
             <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
         </div>
     ''', unsafe_allow_html=True)
+
+# Botão Limpar deslocado para baixo da logo
+col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
+with col_btn2:
+    st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # Listas Padrão extraídas da sua planilha (Carregam sempre, garantindo que nunca fiquem vazias)
 lista_tipos_obra = ['AF-AMPLIAÇÃO DE FASE', 'AP-AMPLIAÇÃO DE POTENCIA', 'CA-CONSTRUÇÃO DE AL', 'CT-CONSTRUÇÃO DE RD', 'DV-DIVISÃO DE CIRCUITO', 'FC-FLEXIBILIZAÇÃO DE CIRCUITO', 'IE-INSTALAÇÃO DE EQUIPAMENTOS', 'IT-INSTALAÇÃO DE TRANSFORMADORES', 'ME-MELHORIA DE REDE DE DISTRIBUIÇÃO', 'MI-MICROSSISTEMA ISOLADO DE GERAÇÃO DE ENERGIA', 'MP-REALOCAÇÃO DE POSTE', 'MT-REALOCAÇÃO DE TRANSFORMADORES RD', 'RC-RECAPACITAÇÃO DE CONDUTORES', 'RE-RECAPACITAÇÃO DE EQUIPAMENTOS DE RD', 'RF-RECAPACITAÇÃO DE C,FA, C,FU E PR', 'RP-RECAPACITAÇÃO DE POSTES', 'RT-RECAPACITAÇÃO DE TRANSFORMADOR DE RD', 'SI-SISTEMA INDIVIDUAL DE GERAÇÃO DE ENERGIA', 'TE-REALOCAÇÃO DE EQUIPAMENTOS']
@@ -251,10 +264,6 @@ with c2:
         man_livre = criar_linha_input("Escrita Livre", "text", "i7")
         man_endereco = criar_linha_input("Endereço", "text", "i8")
         man_cc = criar_linha_input("Conta Contrato", "text", "i9")
-        
-        # Botão para zerar todos os campos manuais
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
 
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
