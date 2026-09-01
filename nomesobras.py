@@ -223,7 +223,7 @@ with c2:
         <tr><td class="lbl">Instalação CCS</td><td class="val">{instalacao}</td></tr>
         <tr><td class="lbl">Tipo de Obra</td><td class="val">{tipo_obra_sisco}</td></tr>
         <tr><td class="lbl">Data Abertura</td><td class="val">{data_abertura}</td></tr>
-        <tr><td class="lbl">FASE</td><td class="val">{fase}</td></tr>
+        <tr><td class="lbl">Fase</td><td class="val">{fase}</td></tr>
         <tr><td class="lbl text-blue">LAT</td><td class="val">{lat}</td></tr>
         <tr><td class="lbl text-blue">LONG</td><td class="val">{lon}</td></tr>
     </table>
