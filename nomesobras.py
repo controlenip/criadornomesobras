@@ -40,9 +40,9 @@ st.markdown("""
     .stSelectbox, .stTextInput { margin-bottom: -10px !important; }
     .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
     
-    /* Regra para destacar o botão primário */
+    /* Regra para destacar o botão primário com tamanho reduzido */
     button[kind="primary"] p {
-        font-size: 16px !important;
+        font-size: 14px !important;
         font-weight: 800 !important;
     }
 </style>
@@ -113,9 +113,10 @@ if os.path.exists("LOGO_NIP.png"):
         </div>
     ''', unsafe_allow_html=True)
 
-col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
+# Colunas ajustadas para 2.5 / 1 / 2.5 para estreitar o botão
+col_btn1, col_btn2, col_btn3 = st.columns([2.5, 1, 2.5])
 with col_btn2:
-    st.button("🧹 Limpar Campos Manuais", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
+    st.button("🧹 LIMPAR CAMPOS", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
