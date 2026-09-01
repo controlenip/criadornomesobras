@@ -40,10 +40,11 @@ st.markdown("""
     .stSelectbox, .stTextInput { margin-bottom: -10px !important; }
     .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
     
-    /* Regra para destacar o botão primário com tamanho reduzido */
-    button[kind="primary"] p {
-        font-size: 14px !important;
-        font-weight: 800 !important;
+    /* Regra para o botão de limpar ficar compacto e com o ícone visível */
+    button[kind="secondary"] p {
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: #334155 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -113,10 +114,10 @@ if os.path.exists("LOGO_NIP.png"):
         </div>
     ''', unsafe_allow_html=True)
 
-# Colunas ajustadas para 2.5 / 1 / 2.5 para estreitar o botão
-col_btn1, col_btn2, col_btn3 = st.columns([2.5, 1, 2.5])
+# Colunas ajustadas para reduzir o botão e mantê-lo centralizado
+col_btn1, col_btn2, col_btn3 = st.columns([3.5, 1.5, 3.5])
 with col_btn2:
-    st.button("🧹 LIMPAR CAMPOS", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
+    st.button("🧹 LIMPAR CAMPOS", on_click=limpar_campos_manuais, use_container_width=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -151,7 +152,7 @@ if arquivo_bd:
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 # ==========================================
-# COLUNA 1 - SOLICITAÇÕES EM LOTE
+# COLUNA 1 - SOLICITAÇÕES EM LOTE E FILTRO
 # ==========================================
 with c1:
     st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
@@ -163,6 +164,8 @@ with c1:
     sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
     
     solicitacoes = []
+    notas_removidas = []
+    
     if sols_input and sols_input.strip():
         parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
         
@@ -170,6 +173,8 @@ with c1:
         for sol in parts:
             fase_sol = "MO"
             pi_sol = ""
+            status_sap_temp = ""
+            
             if not df_sisco.empty:
                 r_s = df_sisco[df_sisco['Nota CCS'] == sol]
                 if not r_s.empty:
@@ -186,9 +191,14 @@ with c1:
                         fase_sol = f_temp
                     if not pi_sol or pi_sol.lower() == 'nan':
                         pi_sol = str(r_n.iloc[0].get('TIPO LIGAÇÃO', r_n.iloc[0].get('TIPO NOTA', '')))
+                    status_sap_temp = str(r_n.iloc[0].get('STATUS SAP', '')).strip().upper()
             
-            if pi_sol.lower() == 'nan': pi_sol = ""
-            notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
+            # Filtro Inteligente: Separa CANC e FINL
+            if status_sap_temp in ['CANC', 'FINL']:
+                notas_removidas.append(f"❌ {sol} ({status_sap_temp})")
+            else:
+                if pi_sol.lower() == 'nan': pi_sol = ""
+                notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
             
         pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
         aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
@@ -202,9 +212,15 @@ with c1:
                 tr_notes.remove(escolhida_tr)
                 solicitacoes = [escolhida_tr] + tr_notes + outras_notes
             else:
-                solicitacoes = parts
+                solicitacoes = [n['sol'] for n in notas_processadas]
         else:
-            solicitacoes = parts
+            solicitacoes = [n['sol'] for n in notas_processadas]
+            
+    # Quadro Visual de Obras Removidas
+    if notas_removidas:
+        st.markdown('<div class="eh-yellow" style="margin-top: 15px; background-color: #fef2f2; color: #991b1b; border-color: #fca5a5;">⚠️ OBRAS CANCELADAS / FINALIZADAS</div>', unsafe_allow_html=True)
+        removidas_str = "<br>".join(notas_removidas)
+        st.markdown(f'<div class="list-box" style="min-height: 50px; color: #dc2626; background-color: #fef2f2;">{removidas_str}</div>', unsafe_allow_html=True)
 
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon, status_sap = "", "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
