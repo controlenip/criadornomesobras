@@ -11,7 +11,8 @@ st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️"
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
+    /* Ajuste para a barra lateral nativa aparecer corretamente e dar respiro no topo */
+    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
     html, body, [class*="css"] { font-size: 12px !important; }
     
     .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
@@ -39,18 +40,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Função para resetar os campos manuais e zerar a lista de obras
+# Função para resetar os campos manuais
 def limpar_campos_manuais():
-    # Limpa selects e text inputs manuais
     for i in range(1, 10):
         chave = f"i{i}"
         if chave in st.session_state:
             st.session_state[chave] = ""
-    # Limpa as obras inseridas e reseta contador
-    st.session_state.num_notas = 1
-    for k in list(st.session_state.keys()):
-        if k.startswith("nota_input_"):
-            st.session_state[k] = ""
 
 # Função para adicionar novo campo de nota dinamicamente
 def add_nota():
@@ -81,24 +76,16 @@ def carregar_dados(file):
 # 2. LOGO NO TOPO E DADOS PADRÃO
 # ==========================================
 
-st.markdown("<br>", unsafe_allow_html=True) # Respiro no topo para prevenir corte
 # Inserção da Logo via HTML (Sem Zoom, tamanho perfeito e centralizado)
 if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
         b64_logo = base64.b64encode(image_file.read()).decode()
     
     st.markdown(f'''
-        <div style="text-align: center; margin-bottom: 10px;">
+        <div style="text-align: center; margin-bottom: 25px;">
             <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
         </div>
     ''', unsafe_allow_html=True)
-
-# Botão Limpar deslocado para baixo da logo
-col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
-with col_btn2:
-    st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
 
 # Listas Padrão extraídas da sua planilha (Carregam sempre, garantindo que nunca fiquem vazias)
 lista_tipos_obra = ['AF-AMPLIAÇÃO DE FASE', 'AP-AMPLIAÇÃO DE POTENCIA', 'CA-CONSTRUÇÃO DE AL', 'CT-CONSTRUÇÃO DE RD', 'DV-DIVISÃO DE CIRCUITO', 'FC-FLEXIBILIZAÇÃO DE CIRCUITO', 'IE-INSTALAÇÃO DE EQUIPAMENTOS', 'IT-INSTALAÇÃO DE TRANSFORMADORES', 'ME-MELHORIA DE REDE DE DISTRIBUIÇÃO', 'MI-MICROSSISTEMA ISOLADO DE GERAÇÃO DE ENERGIA', 'MP-REALOCAÇÃO DE POSTE', 'MT-REALOCAÇÃO DE TRANSFORMADORES RD', 'RC-RECAPACITAÇÃO DE CONDUTORES', 'RE-RECAPACITAÇÃO DE EQUIPAMENTOS DE RD', 'RF-RECAPACITAÇÃO DE C,FA, C,FU E PR', 'RP-RECAPACITAÇÃO DE POSTES', 'RT-RECAPACITAÇÃO DE TRANSFORMADOR DE RD', 'SI-SISTEMA INDIVIDUAL DE GERAÇÃO DE ENERGIA', 'TE-REALOCAÇÃO DE EQUIPAMENTOS']
@@ -157,6 +144,7 @@ with c1:
 
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
+obs_extra = ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
 obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
@@ -219,9 +207,18 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not reg_raw or reg_raw.lower() == 'nan': reg_raw = str(r_sisco.get('Regional', '')) if r_sisco is not None else ""
         reg_raw = reg_raw.upper()
         
-        obs = str(r_sisco.get('Obs(última obs)', '')) if r_sisco is not None else ""
+        # Extração de Observações 1 (INFORMAÇÕES) - Com fallbacks caso a nova base não tenha a coluna
+        obs = str(r_sisco.get('INFORMAÇÕES', '')) if r_sisco is not None else ""
+        if not obs or obs.lower() == 'nan': obs = str(r_notas.get('INFORMAÇÕES', '')) if r_notas is not None else ""
+        if not obs or obs.lower() == 'nan': obs = str(r_sisco.get('Obs(última obs)', '')) if r_sisco is not None else ""
         if not obs or obs.lower() == 'nan': obs = str(r_notas.get('PONTO DE REFERENCIA', '')) if r_notas is not None else ""
         if obs.lower() == 'nan': obs = ""
+
+        # Extração de Observações 2 (INFORMAÇÕES EXTRAS)
+        obs_extra = str(r_sisco.get('INFORMAÇÕES EXTRAS', '')) if r_sisco is not None else ""
+        if not obs_extra or obs_extra.lower() == 'nan': obs_extra = str(r_notas.get('INFORMAÇÕES EXTRAS', '')) if r_notas is not None else ""
+        if obs_extra.lower() == 'nan': obs_extra = ""
+        
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
 
@@ -264,6 +261,10 @@ with c2:
         man_livre = criar_linha_input("Escrita Livre", "text", "i7")
         man_endereco = criar_linha_input("Endereço", "text", "i8")
         man_cc = criar_linha_input("Conta Contrato", "text", "i9")
+        
+        # Botão para zerar todos os campos manuais
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
 
 # ==========================================
 # 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
@@ -450,7 +451,10 @@ with c3:
     </table>
     
     <div class="eh-dark" style="text-align: left; padding-left: 10px;">"" MAIS OBSERVAÇÕES ABAIXO...</div>
-    <div class="obs-box">{obs}</div>
+    <div class="obs-box" style="margin-bottom: 15px;">{obs}</div>
+
+    <div class="eh-dark" style="text-align: left; padding-left: 10px;">"" MAIS OBSERVAÇÕES ABAIXO...</div>
+    <div class="obs-box">{obs_extra}</div>
     """, unsafe_allow_html=True)
 
 with c4:
