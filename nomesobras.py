@@ -28,7 +28,6 @@ st.markdown("""
     .text-red { color: #dc2626 !important; }
     .text-green { color: #059669 !important; }
     
-    /* Quadro de observações atualizado para crescer automaticamente com o texto */
     .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 80px; height: auto; white-space: pre-wrap; line-height: 1.4; border-radius: 0 0 4px 4px;}
     
     .desc-row { border: 1px solid #cbd5e1; height: 26px; width: 100%; margin-bottom: 4px; padding: 4px 8px; font-weight: 600; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
@@ -359,7 +358,7 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
     obra_relampago_formatada = clean_name[:34].upper()
     
-    desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final}."
+    desc_str = f"{val_sol_final}-{val_livre_final_desc}, FASE {fase if fase else 'MO'}, CC-{val_cc_final}."
     
     nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
     descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
@@ -383,6 +382,11 @@ else:
             cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
             if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
             
+            fase_sol = str(r_sol_sisco.get('FASE', 'MO')).upper() if r_sol_sisco is not None else "MO"
+            if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol:
+                fase_sol = str(r_sol_notas.get('FASE', 'MO')).upper() if r_sol_notas is not None else "MO"
+            if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol: fase_sol = "MO"
+            
             pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
             val_sol_final = man_sol if man_sol else sol
             
@@ -391,7 +395,7 @@ else:
             
             val_cc_final = man_cc if man_cc else cc_sol
             
-            desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final}."
+            desc_str = f"{val_sol_final}-{val_livre_final_desc}, FASE {fase_sol}, CC-{val_cc_final}."
             
             raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
             clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
@@ -407,6 +411,7 @@ else:
             
         descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
         
+        # Lógica de NOTAS ASSOCIADAS: Apenas a primeira ganha nome SGO, as outras ficam vazias para alinhamento
         if notas_associadas and idx > 0:
             nomes_obras_html += f'<div class="desc-row">&nbsp;</div>\n'
         else:
