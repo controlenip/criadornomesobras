@@ -3,6 +3,7 @@ import pandas as pd
 import unicodedata
 import os
 import base64
+import re
 
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
@@ -58,7 +59,6 @@ def remover_acentos(texto):
     texto = str(texto).upper().strip()
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
-# Função para formatar data (transforma 2026-07-21 00:00:00 em 21/07/2026)
 def formatar_data(data_raw):
     try:
         if pd.isna(data_raw) or str(data_raw).lower() == 'nan' or str(data_raw).strip() == "":
@@ -88,7 +88,6 @@ def carregar_dados(file):
     if not df_notas.empty and 'PROTOCOLO' in df_notas.columns:
         df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).str.replace('.0', '', regex=False)
         
-    # Correção do nome da aba: Procura 'DADOS' ou 'Dados'
     try: 
         df_dados = pd.read_excel(xls, sheet_name='DADOS', header=1)
     except:
@@ -140,7 +139,7 @@ if arquivo_bd:
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 # ==========================================
-# COLUNA 1 - SOLICITAÇÕES INDIVIDUAIS
+# COLUNA 1 - SOLICITAÇÕES INDIVIDUAIS COM COLA EM LOTE
 # ==========================================
 with c1:
     st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
@@ -163,7 +162,9 @@ with c1:
     for i in range(st.session_state.num_notas):
         val = st.text_input(f"Obra {i+1}", key=f"nota_input_{i}", placeholder=f"Obra {i+1}...", label_visibility="collapsed")
         if val and val.strip():
-            solicitacoes.append(val.strip())
+            # Inteligência de colagem: divide por espaços, vírgulas, ponto-e-vírgula ou quebras de linha
+            parts = [p.strip() for p in re.split(r'[\s,;]+', val.strip()) if p.strip()]
+            solicitacoes.extend(parts)
             
     st.button("➕ Adicionar Obra", on_click=add_nota, use_container_width=True)
 
@@ -207,7 +208,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         else:
             tipo_obra_sisco = tipo_obra_raw
             
-        # Formatação inteligente de data (DD/MM/AAAA)
         data_abertura_raw = str(r_notas.get('DATA ABERTURA', '')) if r_notas is not None else ""
         if not data_abertura_raw or data_abertura_raw.lower() == 'nan':
             data_abertura_raw = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
@@ -392,7 +392,9 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
     obra_relampago_formatada = clean_name[:34].upper()
     
-    desc_str = f"{val_sol_final}-{val_livre_final_desc}, FASE {fase if fase else 'MO'}, CC-{val_cc_final}."
+    # Lógica de Formatação da Fase para Cadastro Manual
+    fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT"] else f"(FASE {fase})"
+    desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
     
     nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
     descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
@@ -430,7 +432,9 @@ else:
             
             val_cc_final = man_cc if man_cc else cc_sol
             
-            desc_str = f"{val_sol_final}-{val_livre_final_desc}, FASE {fase_sol}, CC-{val_cc_final}."
+            # Lógica de Formatação da Fase para o Texto Final
+            fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase_sol.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase_sol.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase_sol.upper() in ["BI", "BT"] else f"(FASE {fase_sol})"
+            desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
             
             raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
             clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
