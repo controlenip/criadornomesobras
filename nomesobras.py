@@ -32,7 +32,6 @@ st.markdown("""
     
     .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 80px; height: auto; white-space: pre-wrap; line-height: 1.4; border-radius: 0 0 4px 4px;}
     
-    /* Novo estilo para o quadro único de listagem (Descrições e Nomes) */
     .list-box { background-color: white; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0f172a; white-space: pre-wrap; line-height: 1.8; border-radius: 0 0 4px 4px; min-height: 150px; height: auto; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
     
     .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
@@ -110,7 +109,8 @@ if os.path.exists("LOGO_NIP.png"):
 
 col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
 with col_btn2:
-    st.button("🧹 Limpar Campos Manuais", on_click=limpar_campos_manuais, use_container_width=True)
+    # Adicionado type="primary" para deixar o botão em destaque/chamativo
+    st.button("🧹 Limpar Campos Manuais", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -158,33 +158,46 @@ with c1:
     
     solicitacoes = []
     if sols_input and sols_input.strip():
-        # Inteligência de colagem: divide por espaços, vírgulas, ponto-e-vírgula ou quebras de linha
         parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
         
         notas_processadas = []
         for sol in parts:
             fase_sol = "MO"
+            pi_sol = ""
             if not df_sisco.empty:
                 r_s = df_sisco[df_sisco['Nota CCS'] == sol]
                 if not r_s.empty:
                     f_temp = str(r_s.iloc[0].get('FASE', 'MO')).upper()
                     if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
                         fase_sol = f_temp
-            if fase_sol == "MO" and not df_notas.empty:
+                    pi_sol = str(r_s.iloc[0].get('Tipo de Projeto(PI)', ''))
+            
+            if not df_notas.empty:
                 r_n = df_notas[df_notas['PROTOCOLO'] == sol]
                 if not r_n.empty:
                     f_temp = str(r_n.iloc[0].get('FASE', 'MO')).upper()
-                    if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                    if fase_sol == "MO" and f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
                         fase_sol = f_temp
-            notas_processadas.append({'sol': sol, 'fase': fase_sol})
+                    if not pi_sol or pi_sol.lower() == 'nan':
+                        pi_sol = str(r_n.iloc[0].get('TIPO LIGAÇÃO', r_n.iloc[0].get('TIPO NOTA', '')))
             
-        tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
-        outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
+            if pi_sol.lower() == 'nan': pi_sol = ""
+            notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
+            
+        # Regra específica TR: Apenas ativa se o PI for um dos especificados
+        pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
+        aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
         
-        if tr_notes:
-            escolhida_tr = random.choice(tr_notes)
-            tr_notes.remove(escolhida_tr)
-            solicitacoes = [escolhida_tr] + tr_notes + outras_notes
+        if aplicar_regra_tr:
+            tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
+            outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
+            
+            if tr_notes:
+                escolhida_tr = random.choice(tr_notes)
+                tr_notes.remove(escolhida_tr)
+                solicitacoes = [escolhida_tr] + tr_notes + outras_notes
+            else:
+                solicitacoes = parts
         else:
             solicitacoes = parts
 
@@ -486,7 +499,7 @@ else:
         descricoes_list.append(desc_str)
         
         if notas_associadas and idx > 0:
-            pass # Nomes associados ficam vazios na lista unificada
+            pass 
         else:
             nomes_obras_list.append(nome_str)
 
