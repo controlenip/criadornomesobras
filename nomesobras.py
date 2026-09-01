@@ -39,6 +39,12 @@ st.markdown("""
     input[data-testid="stTextInput"] { border: 1px solid #cbd5e1; border-radius: 4px; height: 35px !important; min-height: 35px !important; font-size: 11px; font-weight: bold; background-color: white;}
     .stSelectbox, .stTextInput { margin-bottom: -10px !important; }
     .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
+    
+    /* Regra para destacar o botão primário */
+    button[kind="primary"] p {
+        font-size: 16px !important;
+        font-weight: 800 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,7 +115,6 @@ if os.path.exists("LOGO_NIP.png"):
 
 col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
 with col_btn2:
-    # Adicionado type="primary" para deixar o botão em destaque/chamativo
     st.button("🧹 Limpar Campos Manuais", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
@@ -184,7 +189,6 @@ with c1:
             if pi_sol.lower() == 'nan': pi_sol = ""
             notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
             
-        # Regra específica TR: Apenas ativa se o PI for um dos especificados
         pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
         aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
         
