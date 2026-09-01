@@ -4,6 +4,7 @@ import unicodedata
 import os
 import base64
 import re
+import random
 
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
@@ -46,13 +47,8 @@ def limpar_campos_manuais():
         chave = f"i{i}"
         if chave in st.session_state:
             st.session_state[chave] = ""
-    st.session_state.num_notas = 1
-    for k in list(st.session_state.keys()):
-        if k.startswith("nota_input_"):
-            st.session_state[k] = ""
-
-def add_nota():
-    st.session_state.num_notas += 1
+    if "text_area_obras" in st.session_state:
+        st.session_state["text_area_obras"] = ""
 
 def remover_acentos(texto):
     if pd.isna(texto) or texto == "": return ""
@@ -125,6 +121,7 @@ lista_id = ['AL-Alimentador Tronco', 'BA-Barramento', 'CC-Conta Contrato', 'CO-N
 arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
 df_sisco, df_notas, df_dados = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+map_tipo_obra, map_mun = {}, {}
 
 if arquivo_bd:
     with st.spinner("Carregando banco de dados..."):
@@ -136,10 +133,19 @@ if arquivo_bd:
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
         if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted([str(x).replace('.0', '') for x in df_dados['ID DO NUMERO'].dropna().unique().tolist()])
 
+        # Prepara Mapeamentos Inteligentes
+        if 'TIPO DE OBRA NO SISCO' in df_dados.columns and 'SIGLA' in df_dados.columns:
+            df_to = df_dados.dropna(subset=['TIPO DE OBRA NO SISCO', 'SIGLA'])
+            map_tipo_obra = dict(zip(df_to['TIPO DE OBRA NO SISCO'].astype(str).apply(remover_acentos), df_to['SIGLA'].astype(str).str.strip().str.upper()))
+            
+        if 'MUNICIPIO' in df_dados.columns and 'SIGLA.1' in df_dados.columns:
+            df_mu = df_dados.dropna(subset=['MUNICIPIO', 'SIGLA.1'])
+            map_mun = dict(zip(df_mu['MUNICIPIO'].astype(str).apply(remover_acentos), df_mu['SIGLA.1'].astype(str).str.strip().str.upper()))
+
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 # ==========================================
-# COLUNA 1 - SOLICITAÇÕES INDIVIDUAIS COM COLA EM LOTE
+# COLUNA 1 - SOLICITAÇÕES INDIVIDUAIS
 # ==========================================
 with c1:
     st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
@@ -148,25 +154,38 @@ with c1:
     notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    if 'num_notas' not in st.session_state:
-        st.session_state.num_notas = 1
-
-    if 'nota_input_0' in st.session_state and st.session_state['nota_input_0'].strip() == "":
-        st.session_state.num_notas = 1
-        for k in list(st.session_state.keys()):
-            if k.startswith("nota_input_") and k != "nota_input_0":
-                del st.session_state[k]
-
-    solicitacoes = []
+    sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
     
-    for i in range(st.session_state.num_notas):
-        val = st.text_input(f"Obra {i+1}", key=f"nota_input_{i}", placeholder=f"Obra {i+1}...", label_visibility="collapsed")
-        if val and val.strip():
-            # Inteligência de colagem: divide por espaços, vírgulas, ponto-e-vírgula ou quebras de linha
-            parts = [p.strip() for p in re.split(r'[\s,;]+', val.strip()) if p.strip()]
-            solicitacoes.extend(parts)
+    solicitacoes = []
+    if sols_input and sols_input.strip():
+        parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
+        
+        notas_processadas = []
+        for sol in parts:
+            fase_sol = "MO"
+            if not df_sisco.empty:
+                r_s = df_sisco[df_sisco['Nota CCS'] == sol]
+                if not r_s.empty:
+                    f_temp = str(r_s.iloc[0].get('FASE', 'MO')).upper()
+                    if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                        fase_sol = f_temp
+            if fase_sol == "MO" and not df_notas.empty:
+                r_n = df_notas[df_notas['PROTOCOLO'] == sol]
+                if not r_n.empty:
+                    f_temp = str(r_n.iloc[0].get('FASE', 'MO')).upper()
+                    if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                        fase_sol = f_temp
+            notas_processadas.append({'sol': sol, 'fase': fase_sol})
             
-    st.button("➕ Adicionar Obra", on_click=add_nota, use_container_width=True)
+        tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
+        outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
+        
+        if tr_notes:
+            escolhida_tr = random.choice(tr_notes)
+            tr_notes.remove(escolhida_tr)
+            solicitacoes = [escolhida_tr] + tr_notes + outras_notes
+        else:
+            solicitacoes = parts
 
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon, status_sap = "", "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
@@ -392,7 +411,6 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
     obra_relampago_formatada = clean_name[:34].upper()
     
-    # Lógica de Formatação da Fase para Cadastro Manual
     fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT"] else f"(FASE {fase})"
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
     
@@ -424,7 +442,21 @@ else:
                 fase_sol = str(r_sol_notas.get('FASE', 'MO')).upper() if r_sol_notas is not None else "MO"
             if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol: fase_sol = "MO"
             
-            pref_mun = man_mun.split('-')[0] if man_mun else (remover_acentos(cid_sol)[:3] if cid_sol else "XXX")
+            tipo_obra_raw_loop = str(r_sol_notas.get('TIPO NOTA', '')) if r_sol_notas is not None else ""
+            if not tipo_obra_raw_loop or tipo_obra_raw_loop.lower() == 'nan':
+                tipo_obra_raw_loop = str(r_sol_sisco.get('Detalhes', '')) if r_sol_sisco is not None else ""
+                
+            if tipo_obra_raw_loop.lower() == 'nan': tipo_obra_raw_loop = ""
+            parts_to = tipo_obra_raw_loop.replace("-", " ").strip().split(" ")
+            if len(parts_to) > 3:
+                tipo_obra_sisco_loop = " ".join(parts_to[:3])
+            else:
+                tipo_obra_sisco_loop = tipo_obra_raw_loop
+
+            cid_sol_limpo = remover_acentos(cid_sol)
+            pref_mun = man_mun.split('-')[0] if man_mun else map_mun.get(cid_sol_limpo, cid_sol_limpo[:3] if cid_sol_limpo else "XXX")
+            pref_tipo_loop = man_tipo_obra.split('-')[0] if man_tipo_obra else map_tipo_obra.get(remover_acentos(tipo_obra_sisco_loop), "CT")
+            
             val_sol_final = man_sol if man_sol else sol
             
             val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else cli_sol.replace(" ", "-")[:15]
@@ -432,11 +464,10 @@ else:
             
             val_cc_final = man_cc if man_cc else cc_sol
             
-            # Lógica de Formatação da Fase para o Texto Final
             fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase_sol.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase_sol.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase_sol.upper() in ["BI", "BT"] else f"(FASE {fase_sol})"
             desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
             
-            raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
+            raw_name = f"{pref_especial}{pref_tipo_loop}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
             clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
             nome_str = clean_name[:34].upper()
             
