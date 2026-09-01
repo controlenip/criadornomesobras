@@ -58,6 +58,16 @@ def remover_acentos(texto):
     texto = str(texto).upper().strip()
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
+# Função para formatar data (transforma 2026-07-21 00:00:00 em 21/07/2026)
+def formatar_data(data_raw):
+    try:
+        if pd.isna(data_raw) or str(data_raw).lower() == 'nan' or str(data_raw).strip() == "":
+            return ""
+        data_obj = pd.to_datetime(data_raw)
+        return data_obj.strftime('%d/%m/%Y')
+    except:
+        return str(data_raw)[:10]
+
 @st.cache_data(show_spinner=False)
 def carregar_dados(file):
     xls = pd.ExcelFile(file)
@@ -78,8 +88,12 @@ def carregar_dados(file):
     if not df_notas.empty and 'PROTOCOLO' in df_notas.columns:
         df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).str.replace('.0', '', regex=False)
         
-    try: df_dados = pd.read_excel(xls, sheet_name='Dados', header=1)
-    except: df_dados = pd.DataFrame()
+    # Correção do nome da aba: Procura 'DADOS' ou 'Dados'
+    try: 
+        df_dados = pd.read_excel(xls, sheet_name='DADOS', header=1)
+    except:
+        try: df_dados = pd.read_excel(xls, sheet_name='Dados', header=1)
+        except: df_dados = pd.DataFrame()
     
     return df_sisco, df_notas, df_dados
 
@@ -182,7 +196,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
             fase = str(r_notas.get('FASE', 'MO')).upper() if r_notas is not None else "MO"
         if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
             
-        # Modificado para puxar de TIPO NOTA (coluna F) preferencialmente
         tipo_obra_raw = str(r_notas.get('TIPO NOTA', '')) if r_notas is not None else ""
         if not tipo_obra_raw or tipo_obra_raw.lower() == 'nan':
             tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
@@ -192,16 +205,16 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if len(parts) > 3:
             tipo_obra_sisco = " ".join(parts[:3])
         else:
-            tipo_obra_sisco = tipo_obra_raw # Preserva a string se for curta (ex: UNI)
+            tipo_obra_sisco = tipo_obra_raw
             
-        # Modificado para puxar de DATA ABERTURA (coluna G) preferencialmente
-        data_abertura = str(r_notas.get('DATA ABERTURA', '')) if r_notas is not None else ""
-        if not data_abertura or data_abertura.lower() == 'nan':
-            data_abertura = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
-        if not data_abertura or data_abertura.lower() == 'nan': 
-            data_abertura = str(r_notas.get('DATA DA SOLICITAÇÃO', ''))[:10] if r_notas is not None else ""
+        # Formatação inteligente de data (DD/MM/AAAA)
+        data_abertura_raw = str(r_notas.get('DATA ABERTURA', '')) if r_notas is not None else ""
+        if not data_abertura_raw or data_abertura_raw.lower() == 'nan':
+            data_abertura_raw = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
+        if not data_abertura_raw or data_abertura_raw.lower() == 'nan': 
+            data_abertura_raw = str(r_notas.get('DATA DA SOLICITAÇÃO', '')) if r_notas is not None else ""
+        data_abertura = formatar_data(data_abertura_raw)
             
-        # Status SAP (coluna I)
         status_sap = str(r_notas.get('STATUS SAP', '')) if r_notas is not None else ""
         if status_sap.lower() == 'nan': status_sap = ""
             
