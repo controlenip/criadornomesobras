@@ -32,7 +32,8 @@ st.markdown("""
     
     .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 80px; height: auto; white-space: pre-wrap; line-height: 1.4; border-radius: 0 0 4px 4px;}
     
-    .desc-row { border: 1px solid #cbd5e1; height: 26px; width: 100%; margin-bottom: 4px; padding: 4px 8px; font-weight: 600; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: white; color: #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
+    /* Novo estilo para o quadro único de listagem (Descrições e Nomes) */
+    .list-box { background-color: white; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0f172a; white-space: pre-wrap; line-height: 1.8; border-radius: 0 0 4px 4px; min-height: 150px; height: auto; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
     
     .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
     div[data-baseweb="select"] > div { border: 1px solid #cbd5e1; border-radius: 4px; min-height: 35px !important; height: 35px !important; font-size: 11px; background-color: white;}
@@ -133,7 +134,6 @@ if arquivo_bd:
         if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
         if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted([str(x).replace('.0', '') for x in df_dados['ID DO NUMERO'].dropna().unique().tolist()])
 
-        # Prepara Mapeamentos Inteligentes
         if 'TIPO DE OBRA NO SISCO' in df_dados.columns and 'SIGLA' in df_dados.columns:
             df_to = df_dados.dropna(subset=['TIPO DE OBRA NO SISCO', 'SIGLA'])
             map_tipo_obra = dict(zip(df_to['TIPO DE OBRA NO SISCO'].astype(str).apply(remover_acentos), df_to['SIGLA'].astype(str).str.strip().str.upper()))
@@ -145,7 +145,7 @@ if arquivo_bd:
 c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 # ==========================================
-# COLUNA 1 - SOLICITAÇÕES INDIVIDUAIS
+# COLUNA 1 - SOLICITAÇÕES EM LOTE
 # ==========================================
 with c1:
     st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
@@ -158,6 +158,7 @@ with c1:
     
     solicitacoes = []
     if sols_input and sols_input.strip():
+        # Inteligência de colagem: divide por espaços, vírgulas, ponto-e-vírgula ou quebras de linha
         parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
         
         notas_processadas = []
@@ -192,7 +193,10 @@ cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", 
 obs_extra = ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
-obra_relampago_formatada, descricoes_html, nomes_obras_html = "", "", ""
+obra_relampago_formatada = ""
+
+descricoes_list = []
+nomes_obras_list = []
 
 if solicitacoes and (not df_sisco.empty or not df_notas.empty):
     solicitacao_principal = solicitacoes[0]
@@ -414,8 +418,8 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT"] else f"(FASE {fase})"
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
     
-    nomes_obras_html += f'<div class="desc-row">{obra_relampago_formatada}</div>\n'
-    descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
+    descricoes_list.append(desc_str)
+    nomes_obras_list.append(obra_relampago_formatada)
 else:
     for idx, sol in enumerate(solicitacoes):
         res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
@@ -479,18 +483,12 @@ else:
             if idx == 0:
                 obra_relampago_formatada = nome_str
             
-        descricoes_html += f'<div class="desc-row">{desc_str}</div>\n'
+        descricoes_list.append(desc_str)
         
-        # Lógica de NOTAS ASSOCIADAS: Apenas a primeira ganha nome SGO, as outras ficam vazias para alinhamento
         if notas_associadas and idx > 0:
-            nomes_obras_html += f'<div class="desc-row">&nbsp;</div>\n'
+            pass # Nomes associados ficam vazios na lista unificada
         else:
-            nomes_obras_html += f'<div class="desc-row">{nome_str}</div>\n'
-
-linhas_restantes = 25 - max(len(solicitacoes), 1 if obra_relampago_formatada else 0)
-for _ in range(max(linhas_restantes, 0)):
-    descricoes_html += '<div class="desc-row"></div>\n'
-    nomes_obras_html += '<div class="desc-row"></div>\n'
+            nomes_obras_list.append(nome_str)
 
 # ==========================================
 # 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
@@ -534,7 +532,9 @@ with c3:
 
 with c4:
     st.markdown('<div class="eh">🖋 DESCRIÇÕES SGO 🖋</div>', unsafe_allow_html=True)
-    st.markdown(descricoes_html, unsafe_allow_html=True)
+    descricoes_html_final = "<br>".join(descricoes_list) if descricoes_list else ""
+    st.markdown(f'<div class="list-box">{descricoes_html_final}</div>', unsafe_allow_html=True)
     
     st.markdown('<div class="eh" style="margin-top: 15px;">🚧 NOMES DAS OBRAS 🚧</div>', unsafe_allow_html=True)
-    st.markdown(nomes_obras_html, unsafe_allow_html=True)
+    nomes_html_final = "<br>".join(nomes_obras_list) if nomes_obras_list else ""
+    st.markdown(f'<div class="list-box">{nomes_html_final}</div>', unsafe_allow_html=True)
