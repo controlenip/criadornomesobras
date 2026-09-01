@@ -40,7 +40,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Função para resetar os campos manuais e zerar a lista de obras
 def limpar_campos_manuais():
     for i in range(1, 10):
         chave = f"i{i}"
@@ -51,7 +50,6 @@ def limpar_campos_manuais():
         if k.startswith("nota_input_"):
             st.session_state[k] = ""
 
-# Função para adicionar novo campo de nota dinamicamente
 def add_nota():
     st.session_state.num_notas += 1
 
@@ -64,7 +62,6 @@ def remover_acentos(texto):
 def carregar_dados(file):
     xls = pd.ExcelFile(file)
     
-    # Proteção: Ignora o erro se a aba 'Sisco' não existir
     try:
         df_sisco = pd.read_excel(xls, sheet_name='Sisco')
         if 'Nota CCS' in df_sisco.columns:
@@ -72,7 +69,6 @@ def carregar_dados(file):
     except:
         df_sisco = pd.DataFrame()
         
-    # Tenta achar 'NotasSisgb', se não achar, procura a nova aba 'NOTAS'
     try: 
         df_notas = pd.read_excel(xls, sheet_name='NotasSisgb')
     except: 
@@ -157,7 +153,7 @@ with c1:
             
     st.button("➕ Adicionar Obra", on_click=add_nota, use_container_width=True)
 
-cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon = "", "", "", "", "", "", ""
+cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon, status_sap = "", "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
 obs_extra = ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
@@ -181,22 +177,33 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
-        # Puxa o dado da Fase usando também a nova aba NOTAS caso necessário
         fase = str(r_sisco.get('FASE', 'MO')).upper() if r_sisco is not None else "MO"
         if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase:
             fase = str(r_notas.get('FASE', 'MO')).upper() if r_notas is not None else "MO"
         if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
             
-        tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
+        # Modificado para puxar de TIPO NOTA (coluna F) preferencialmente
+        tipo_obra_raw = str(r_notas.get('TIPO NOTA', '')) if r_notas is not None else ""
+        if not tipo_obra_raw or tipo_obra_raw.lower() == 'nan':
+            tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
+            
         if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
         parts = tipo_obra_raw.replace("-", " ").strip().split(" ")
         if len(parts) > 3:
             tipo_obra_sisco = " ".join(parts[:3])
         else:
-            tipo_obra_sisco = ""
+            tipo_obra_sisco = tipo_obra_raw # Preserva a string se for curta (ex: UNI)
             
-        data_abertura = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
-        if not data_abertura or data_abertura.lower() == 'nan': data_abertura = str(r_notas.get('DATA DA SOLICITAÇÃO', ''))[:10] if r_notas is not None else ""
+        # Modificado para puxar de DATA ABERTURA (coluna G) preferencialmente
+        data_abertura = str(r_notas.get('DATA ABERTURA', '')) if r_notas is not None else ""
+        if not data_abertura or data_abertura.lower() == 'nan':
+            data_abertura = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
+        if not data_abertura or data_abertura.lower() == 'nan': 
+            data_abertura = str(r_notas.get('DATA DA SOLICITAÇÃO', ''))[:10] if r_notas is not None else ""
+            
+        # Status SAP (coluna I)
+        status_sap = str(r_notas.get('STATUS SAP', '')) if r_notas is not None else ""
+        if status_sap.lower() == 'nan': status_sap = ""
             
         lat = str(r_sisco.get('Latitude', '')) if r_sisco is not None else ""
         if not lat or lat.lower() == 'nan': lat = str(r_notas.get('LATITUDE', '')) if r_notas is not None else ""
@@ -210,16 +217,13 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not cidade_raw or cidade_raw.lower() == 'nan': cidade_raw = str(r_notas.get('MUNICIPIO', '')) if r_notas is not None else ""
         cidade_auto = remover_acentos(cidade_raw)
         
-        # Puxa o Nome, considerando tanto "NOME" quanto "NOME DO SOLICITANTE"
         cliente_auto = str(r_sisco.get('Nome', '')) if r_sisco is not None else ""
-        if not cliente_auto or cliente_auto.lower() == 'nan': 
-            cliente_auto = str(r_notas.get('NOME DO SOLICITANTE', r_notas.get('NOME', ''))) if r_notas is not None else ""
+        if not cliente_auto or cliente_auto.lower() == 'nan': cliente_auto = str(r_notas.get('NOME DO SOLICITANTE', r_notas.get('NOME', ''))) if r_notas is not None else ""
         cliente_auto = cliente_auto.upper()
             
         endereco_auto = str(r_notas.get('ENDEREÇO', '')) if r_notas is not None else ""
         if not endereco_auto or endereco_auto.lower() == 'nan': endereco_auto = str(r_sisco.get('Endereço', '')) if r_sisco is not None else ""
         
-        # Puxa o PI (Tipo Nota), considerando tanto "TIPO LIGAÇÃO" quanto "TIPO NOTA"
         pi_auto = str(r_notas.get('TIPO LIGAÇÃO', r_notas.get('TIPO NOTA', ''))) if r_notas is not None else ""
         if not pi_auto or pi_auto.lower() == 'nan': pi_auto = str(r_sisco.get('Tipo de Projeto(PI)', '')) if r_sisco is not None else ""
         if pi_auto.lower() == 'nan': pi_auto = ""
@@ -251,10 +255,12 @@ with c2:
         <tr><td class="lbl">Conta Contrato</td><td class="val">{cc}</td></tr>
         <tr><td class="lbl">Instalação CCS</td><td class="val">{instalacao}</td></tr>
         <tr><td class="lbl">Tipo de Obra</td><td class="val">{tipo_obra_sisco}</td></tr>
+        <tr><td class="lbl">Status SAP</td><td class="val">{status_sap}</td></tr>
         <tr><td class="lbl">Data Abertura</td><td class="val">{data_abertura}</td></tr>
         <tr><td class="lbl">Fase</td><td class="val">{fase}</td></tr>
-        <tr><td class="lbl text-blue">LAT</td><td class="val">{lat}</td></tr>
-        <tr><td class="lbl text-blue">LONG</td><td class="val">{lon}</td></tr>
+        <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
+        <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
+        <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LAT / LONG</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
     </table>
     """, unsafe_allow_html=True)
     
@@ -398,7 +404,6 @@ else:
             cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
             if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
             
-            # Puxa a fase específica de cada nota do loop
             fase_sol = str(r_sol_sisco.get('FASE', 'MO')).upper() if r_sol_sisco is not None else "MO"
             if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol:
                 fase_sol = str(r_sol_notas.get('FASE', 'MO')).upper() if r_sol_notas is not None else "MO"
