@@ -509,8 +509,10 @@ with st.sidebar:
             st.sidebar.warning(f"⚠️ {msg_obras}")
         else:
             qtd_conflitos = df_andamento['CONFLITO'].sum()
-            st.sidebar.success(f"🔍 {len(df_concluidas)} Concluídas analisadas")
-            st.sidebar.info(f"🔍 {len(df_andamento)} Em Andamento analisadas")
+            
+            # TEXTOS ATUALIZADOS PARA PROVAR QUE O CÓDIGO FOI SALVO
+            st.sidebar.success(f"🔍 {len(df_concluidas)} Concluídas (Ocultas se ok)")
+            st.sidebar.info(f"🔍 {len(df_andamento)} Em Andamento (Ocultas se ok)")
             if qtd_conflitos > 0:
                 st.sidebar.error(f"🚨 {qtd_conflitos} CONFLITOS ISOLADOS NO MAPA!")
             else:
@@ -741,7 +743,9 @@ if mostrar_uc_municipal:
     if geo_uc_mun: folium.GeoJson(geo_uc_mun, name="UC Municipal", style_function=lambda x: {'fillColor': x['properties']['COR'], 'color': x['properties']['COR'], 'weight': 2, 'fillOpacity': 0.4}, tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['UC Municipal:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
 
 
-# Obras Otimizadas (SÓ MOSTRA OS CONFLITOS!) - SEM CLUSTERS
+# ==========================================
+# CAMADAS DE OBRAS OTIMIZADAS (SÓ MOSTRA CONFLITOS!)
+# ==========================================
 dados_tabela_conflito = []
 
 if mostrar_obras and msg_obras == "OK":
@@ -786,12 +790,12 @@ if mostrar_obras and msg_obras == "OK":
             
         fg_concluidas.add_to(mapa)
             
-    # 2. Desenha Obras em Andamento (Apenas Vermelhas/Conflitantes) - AGORA SOLTAS NO MAPA
+    # 2. Desenha Obras em Andamento (Apenas Vermelhas/Conflitantes) - SEM CLUSTER E DIRETO NO MAPA
     if df_andamento is not None:
         fg_andamento = folium.FeatureGroup(name="Obras em Andamento (Conflitos)", show=True)
         
         for _, row in df_andamento.iterrows():
-            # Ignora sumariamente as obras sem conflito para salvar RAM!
+            # FILTRO MÁGICO: Pula sumariamente as obras sem conflito!
             if not row['CONFLITO']:
                 continue
                 
