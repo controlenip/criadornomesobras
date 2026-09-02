@@ -10,7 +10,6 @@ import math
 import requests
 import unicodedata
 import folium
-from folium.plugins import MarkerCluster
 import gc
 from streamlit_folium import st_folium
 import html
@@ -510,10 +509,10 @@ with st.sidebar:
             st.sidebar.warning(f"⚠️ {msg_obras}")
         else:
             qtd_conflitos = df_andamento['CONFLITO'].sum()
-            st.sidebar.success(f"✅ {len(df_concluidas)} Concluídas analisadas")
-            st.sidebar.info(f"✅ {len(df_andamento)} Em Andamento analisadas")
+            st.sidebar.success(f"🔍 {len(df_concluidas)} Concluídas analisadas")
+            st.sidebar.info(f"🔍 {len(df_andamento)} Em Andamento analisadas")
             if qtd_conflitos > 0:
-                st.sidebar.error(f"🚨 {qtd_conflitos} CONFLITOS MAPEADOS!")
+                st.sidebar.error(f"🚨 {qtd_conflitos} CONFLITOS ISOLADOS NO MAPA!")
             else:
                 st.sidebar.success("🎉 Nenhuma obra em conflito!")
             
@@ -742,23 +741,23 @@ if mostrar_uc_municipal:
     if geo_uc_mun: folium.GeoJson(geo_uc_mun, name="UC Municipal", style_function=lambda x: {'fillColor': x['properties']['COR'], 'color': x['properties']['COR'], 'weight': 2, 'fillOpacity': 0.4}, tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['UC Municipal:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
 
 
-# Obras Otimizadas (SÓ MOSTRA OS CONFLITOS!)
+# Obras Otimizadas (SÓ MOSTRA OS CONFLITOS!) - SEM CLUSTERS
 dados_tabela_conflito = []
 
 if mostrar_obras and msg_obras == "OK":
     
-    # Prepara a lista de protocolos em conflito para filtrar o mapa
+    # Prepara a lista de protocolos em conflito
     protocolos_com_conflito = set()
     if df_andamento is not None:
         protocolos_com_conflito = set(df_andamento[df_andamento['CONFLITO']]['PROTOCOLO_CONFLITO'].astype(str))
     
-    # 1. Desenha as Obras Concluídas (Apenas aquelas que sofrem conflito)
+    # 1. Desenha Obras Concluídas (Apenas os Alvos do Conflito)
     if df_concluidas is not None:
-        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas (Em Conflito)", show=True)
+        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas (Alvos)", show=True)
         for _, row in df_concluidas.iterrows():
             protocolo = str(row.get('PROTOCOLO', 'S/N'))
             
-            # FILTRO MÁGICO: Se a concluída não tiver nenhuma outra em cima dela, pula a renderização!
+            # Pula as obras concluídas que estão "livres"
             if protocolo not in protocolos_com_conflito:
                 continue
 
@@ -787,12 +786,12 @@ if mostrar_obras and msg_obras == "OK":
             
         fg_concluidas.add_to(mapa)
             
-    # 2. Desenha Obras em Andamento (Apenas as Vermelhas/Conflitantes)
+    # 2. Desenha Obras em Andamento (Apenas Vermelhas/Conflitantes) - AGORA SOLTAS NO MAPA
     if df_andamento is not None:
-        cluster_andamento = MarkerCluster(name="Obras em Andamento (Conflitos)")
+        fg_andamento = folium.FeatureGroup(name="Obras em Andamento (Conflitos)", show=True)
         
         for _, row in df_andamento.iterrows():
-            # FILTRO MÁGICO: Ignora sumariamente as 6000+ obras sem conflito para salvar RAM!
+            # Ignora sumariamente as obras sem conflito para salvar RAM!
             if not row['CONFLITO']:
                 continue
                 
@@ -834,14 +833,14 @@ if mostrar_obras and msg_obras == "OK":
                 fillOpacity=0.9,
                 tooltip=f"{titulo}: {html.escape(protocolo)}", 
                 popup=folium.Popup(html_popup, max_width=300)
-            ).add_to(cluster_andamento)
+            ).add_to(fg_andamento)
             
-        cluster_andamento.add_to(mapa)
+        fg_andamento.add_to(mapa)
 
 folium.LayerControl(position='topright').add_to(mapa)
 
 # -------------------------------------------------------------
-# 4. CAPTURANDO CLIQUE NA TABELA (RODA ANTES DE DESENHAR O MAPA)
+# 4. CAPTURANDO CLIQUE NA TABELA
 # -------------------------------------------------------------
 zoom_lat, zoom_lon = None, None
 
