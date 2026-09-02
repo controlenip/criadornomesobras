@@ -500,23 +500,24 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 🚧 6. Obras e Projetos")
-    mostrar_obras = st.checkbox("🟢 Obras em Conflito (Detecção 100m)", value=False)
+    mostrar_concluidas = st.checkbox("🔵 OBRAS CONCLUÍDAS", value=False)
+    mostrar_conflitantes = st.checkbox("🚨 OBRAS CONFLITANTES", value=False)
     
     msg_obras, df_concluidas, df_andamento = "OK", None, None
-    if mostrar_obras:
+    if mostrar_concluidas or mostrar_conflitantes:
         msg_obras, df_concluidas, df_andamento = carregar_e_cruzar_obras()
         if msg_obras != "OK":
             st.sidebar.warning(f"⚠️ {msg_obras}")
         else:
             qtd_conflitos = df_andamento['CONFLITO'].sum()
             
-            # TEXTOS ATUALIZADOS PARA PROVAR QUE O CÓDIGO FOI SALVO
-            st.sidebar.success(f"🔍 {len(df_concluidas)} Concluídas (Ocultas se ok)")
-            st.sidebar.info(f"🔍 {len(df_andamento)} Em Andamento (Ocultas se ok)")
-            if qtd_conflitos > 0:
-                st.sidebar.error(f"🚨 {qtd_conflitos} CONFLITOS ISOLADOS NO MAPA!")
-            else:
-                st.sidebar.success("🎉 Nenhuma obra em conflito!")
+            if mostrar_concluidas:
+                st.sidebar.success(f"🔵 {len(df_concluidas)} Concluídas no mapa")
+            if mostrar_conflitantes:
+                if qtd_conflitos > 0:
+                    st.sidebar.error(f"🚨 {qtd_conflitos} CONFLITOS MAPEADOS!")
+                else:
+                    st.sidebar.success("🎉 Nenhuma obra em conflito!")
             
     st.markdown("---")
     st.markdown("### 🗑️ Gerenciar Malha Local")
@@ -744,27 +745,17 @@ if mostrar_uc_municipal:
 
 
 # ==========================================
-# CAMADAS DE OBRAS OTIMIZADAS (SÓ MOSTRA CONFLITOS!)
+# CAMADAS DE OBRAS OTIMIZADAS
 # ==========================================
 dados_tabela_conflito = []
 
-if mostrar_obras and msg_obras == "OK":
+if (mostrar_concluidas or mostrar_conflitantes) and msg_obras == "OK":
     
-    # Prepara a lista de protocolos em conflito
-    protocolos_com_conflito = set()
-    if df_andamento is not None:
-        protocolos_com_conflito = set(df_andamento[df_andamento['CONFLITO']]['PROTOCOLO_CONFLITO'].astype(str))
-    
-    # 1. Desenha Obras Concluídas (Apenas os Alvos do Conflito)
-    if df_concluidas is not None:
-        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas (Alvos)", show=True)
+    # 1. Desenha Obras Concluídas (SE A CAIXA ESTIVER MARCADA)
+    if mostrar_concluidas and df_concluidas is not None:
+        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas", show=True)
         for _, row in df_concluidas.iterrows():
             protocolo = str(row.get('PROTOCOLO', 'S/N'))
-            
-            # Pula as obras concluídas que estão "livres"
-            if protocolo not in protocolos_com_conflito:
-                continue
-
             lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
             municipio = str(row.get('MUNICIPIO', 'S/N'))
             cor_concluida = '#1f77b4' # Azul
@@ -790,12 +781,12 @@ if mostrar_obras and msg_obras == "OK":
             
         fg_concluidas.add_to(mapa)
             
-    # 2. Desenha Obras em Andamento (Apenas Vermelhas/Conflitantes) - SEM CLUSTER E DIRETO NO MAPA
-    if df_andamento is not None:
-        fg_andamento = folium.FeatureGroup(name="Obras em Andamento (Conflitos)", show=True)
+    # 2. Desenha Obras em Andamento Conflitantes (SE A CAIXA ESTIVER MARCADA)
+    if mostrar_conflitantes and df_andamento is not None:
+        fg_andamento = folium.FeatureGroup(name="Obras Conflitantes", show=True)
         
         for _, row in df_andamento.iterrows():
-            # FILTRO MÁGICO: Pula sumariamente as obras sem conflito!
+            # Filtra apenas quem tem conflito
             if not row['CONFLITO']:
                 continue
                 
@@ -849,7 +840,7 @@ folium.LayerControl(position='topright').add_to(mapa)
 zoom_lat, zoom_lon = None, None
 
 with table_container:
-    if mostrar_obras and msg_obras == "OK" and len(dados_tabela_conflito) > 0:
+    if mostrar_conflitantes and msg_obras == "OK" and len(dados_tabela_conflito) > 0:
         st.markdown("---")
         st.markdown(f"<h3 style='color: #d62728;'>🚨 Relatório de Obras Sobrepostas (Total: {len(dados_tabela_conflito)})</h3>", unsafe_allow_html=True)
         st.markdown("As obras abaixo estão em andamento ou correção, mas a coordenada registrada encontra-se dentro do **raio de 100 metros** de uma obra já dada como concluída no SISCO.<br>💡 **DICA INTERATIVA:** Clique em qualquer linha da tabela abaixo para que o mapa foque e dê zoom exato na obra!", unsafe_allow_html=True)
