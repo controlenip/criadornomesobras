@@ -1,894 +1,574 @@
 import streamlit as st
 import pandas as pd
-import io
-import zipfile
-import re
-import time
-import os
-import xml.etree.ElementTree as ET
-import math
-import requests
 import unicodedata
-import folium
-import gc
-from streamlit_folium import st_folium
-import html
-from concurrent.futures import ThreadPoolExecutor
-from scipy.spatial import cKDTree
-
-st.set_page_config(page_title="Visualizador de Malha", page_icon="🗺️", layout="wide")
-
-if not os.path.exists("database/redes"):
-    os.makedirs("database/redes", exist_ok=True)
+import os
+import base64
+import re
+import random
 
 # ==========================================
-# 1. FUNÇÕES BASE, PLANILHA E GEOLOCALIZAÇÃO
+# 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
-def remove_accents(input_str):
-    nfkd_form = unicodedata.normalize('NFKD', str(input_str))
-    return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
+st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
 
-@st.cache_data(show_spinner=False)
-def load_base_mapping():
-    mun_to_reg = {}
-    file_path = "MUNICIPIOS-REGIONAIS.xlsx"
+st.markdown("""
+<style>
+    .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
+    html, body, [class*="css"] { font-size: 12px !important; }
     
-    if not os.path.exists(file_path):
-        st.sidebar.error(f"🚨 Planilha '{file_path}' não encontrada! Verifique o nome.")
-    else:
-        try:
-            df_base = pd.read_excel(file_path)
-            for _, row in df_base.iterrows():
-                mun = remove_accents(str(row.get('MunicIpio', ''))).upper().strip()
-                reg = str(row.get('Regional', '')).strip().upper()
-                if mun and reg and reg != 'NAN':
-                    mun_to_reg[mun] = reg
-        except Exception as e:
-            st.sidebar.error(f"🚨 Erro ao ler a planilha: {e}")
+    .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
+    .eh-yellow { background-color: #fef08a; color: #991b1b; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0; margin-bottom: 5px;}
+    .eh-dark { background-color: #047857; color: white; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; border-radius: 4px 4px 0 0;}
     
-    overrides_centro = [
-        'SANTA LUZIA', 'CONCEICAO DO LAGO-ACU', 'CONCEICAO DO LAGO ACU', 
-        'PINDARE-MIRIM', 'PINDARE MIRIM', 'OLHO DAGUA DAS CUNHAS', 
-        'OLHO D\'AGUA DAS CUNHAS', 'GOVERNADOR LUIZ ROCHA'
-    ]
-    for mun in overrides_centro:
-        if mun not in mun_to_reg:
-            mun_to_reg[mun] = 'CENTRO'
-            
-    return mun_to_reg
+    .et { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background-color: white; margin-bottom: 15px; border-radius: 0 0 4px 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);}
+    .et td { border: 1px solid #e2e8f0; padding: 4px 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; height: 26px; vertical-align: middle; }
+    
+    .lbl { width: 38%; background-color: #f8fafc; color: #475569; font-weight: 600; white-space: nowrap;}
+    .val { width: 62%; background-color: #ffffff; color: #0f172a; font-weight: 700; text-transform: uppercase; }
+    
+    .text-blue { color: #2563eb !important; }
+    .text-red { color: #dc2626 !important; }
+    .text-green { color: #059669 !important; }
+    
+    .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 80px; height: auto; white-space: pre-wrap; line-height: 1.4; border-radius: 0 0 4px 4px;}
+    
+    .list-box { background-color: white; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0f172a; white-space: pre-wrap; line-height: 1.8; border-radius: 0 0 4px 4px; min-height: 150px; height: auto; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
+    
+    .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
+    div[data-baseweb="select"] > div { border: 1px solid #cbd5e1; border-radius: 4px; min-height: 35px !important; height: 35px !important; font-size: 11px; background-color: white;}
+    input[data-testid="stTextInput"] { border: 1px solid #cbd5e1; border-radius: 4px; height: 35px !important; min-height: 35px !important; font-size: 11px; font-weight: bold; background-color: white;}
+    .stSelectbox, .stTextInput { margin-bottom: -10px !important; }
+    .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
+    
+    /* Regra para o botão de limpar ficar compacto e com o ícone visível */
+    button[kind="secondary"] p {
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: #334155 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-@st.cache_data(show_spinner=False)
-def get_base_geojson():
-    mun_to_reg = load_base_mapping()
-    url_geojson = "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-21-mun.json"
+def limpar_campos_manuais():
+    for i in range(1, 10):
+        chave = f"i{i}"
+        if chave in st.session_state:
+            st.session_state[chave] = ""
+    if "text_area_obras" in st.session_state:
+        st.session_state["text_area_obras"] = ""
+
+def remover_acentos(texto):
+    if pd.isna(texto) or texto == "": return ""
+    texto = str(texto).upper().strip()
+    return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+
+def formatar_data(data_raw):
     try:
-        resp = requests.get(url_geojson, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-        geo_data = resp.json()
+        if pd.isna(data_raw) or str(data_raw).lower() == 'nan' or str(data_raw).strip() == "":
+            return ""
+        data_obj = pd.to_datetime(data_raw)
+        return data_obj.strftime('%d/%m/%Y')
     except:
-        return None
+        return str(data_raw)[:10]
 
-    reg_colors = {
-        'LESTE': '#1f77b4', 'CENTRO': '#d62728', 'NOROESTE': '#ffed6f', 
-        'NORTE': '#ff7f0e', 'SUL': '#8fbc8f', 'DESCONHECIDO': '#cccccc'
-    }
-
-    for feature in geo_data['features']:
-        mun_name = feature['properties']['name']
-        mun_name_norm = remove_accents(mun_name).upper().strip()
-        reg = mun_to_reg.get(mun_name_norm, "DESCONHECIDO")
-        
-        feature['properties']['REGIONAL'] = reg
-        feature['properties']['MUNICIPIO'] = mun_name_norm
-        feature['properties']['fillColor'] = reg_colors.get(reg, '#cccccc')
-        
-    return geo_data
-
-def is_point_in_polygon(lon, lat, polygon):
-    inside = False
-    for i in range(len(polygon)):
-        p1x, p1y = polygon[i]
-        p2x, p2y = polygon[(i + 1) % len(polygon)]
-        if ((p1y > lat) != (p2y > lat)) and (lon < (p2x - p1x) * (lat - p1y) / (p2y - p1y + 1e-9) + p1x):
-            inside = not inside
-    return inside
-
-def get_municipio_by_coord(lon, lat, geo_data):
-    if not geo_data: return "N/A", "N/A"
-    for feature in geo_data['features']:
-        geom = feature['geometry']
-        mun = feature['properties'].get('MUNICIPIO', 'N/A')
-        reg = feature['properties'].get('REGIONAL', 'N/A')
-        
-        if geom['type'] == 'Polygon':
-            for ring in geom['coordinates']:
-                if is_point_in_polygon(lon, lat, ring): return mun, reg
-        elif geom['type'] == 'MultiPolygon':
-            for poly in geom['coordinates']:
-                for ring in poly:
-                    if is_point_in_polygon(lon, lat, ring): return mun, reg
-    return "N/A", "N/A"
-
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371.0
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat/2.0)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2.0)**2
-    c = 2 * math.asin(math.sqrt(a))
-    return R * c
-
-def extrair_coordenadas_vis(texto_coords):
-    pontos = []
-    for coord in texto_coords.strip().split():
-        partes = coord.split(',')
-        if len(partes) >= 2:
-            try:
-                lon = float(partes[0].strip().replace(',', '.'))
-                lat = float(partes[1].strip().replace(',', '.'))
-                if lat != 0.0 and lon != 0.0 and -35.0 <= lat <= 5.0 and -75.0 <= lon <= -30.0:
-                    pontos.append([lat, lon]) 
-            except:
-                continue
-    return pontos
-
-def ler_kml_para_geojson(caminho_arquivo, cor_hex):
-    if not os.path.exists(caminho_arquivo): return None
+@st.cache_data(show_spinner=False)
+def carregar_dados(file):
+    xls = pd.ExcelFile(file)
+    
     try:
-        with open(caminho_arquivo, 'r', encoding='utf-8', errors='ignore') as f:
-            kml_str = f.read()
-        kml_str = re.sub(r'\sxmlns(:\w+)?="[^"]+"', '', kml_str)
-        root = ET.fromstring(kml_str)
+        df_sisco = pd.read_excel(xls, sheet_name='Sisco')
+        if 'Nota CCS' in df_sisco.columns:
+            df_sisco['Nota CCS'] = df_sisco['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
+    except:
+        df_sisco = pd.DataFrame()
         
-        features = []
-        for placemark in root.findall('.//Placemark'):
-            name_tag = placemark.find('name')
-            nome = name_tag.text.strip() if name_tag is not None and name_tag.text else "Área Demarcada"
-            
-            for simple_data in placemark.findall('.//SimpleData'):
-                if simple_data.attrib.get('name') in ['nm_municip', 'fase_ti', 'etnia', 'nome']:
-                    if simple_data.text: nome += f" | {simple_data.text}"
-            
-            for poly in placemark.findall('.//Polygon//coordinates'):
-                if poly.text:
-                    coords = []
-                    for coord_str in poly.text.strip().split():
-                        partes = coord_str.split(',')
-                        if len(partes) >= 2: coords.append([float(partes[0]), float(partes[1])])
-                    if coords:
-                        features.append({"type": "Feature", "properties": {"NOME": nome, "COR": cor_hex}, "geometry": {"type": "Polygon", "coordinates": [coords]}})
-                        
-            for pt in placemark.findall('.//Point/coordinates'):
-                if pt.text:
-                    partes = pt.text.strip().split(',')
-                    if len(partes) >= 2:
-                        features.append({"type": "Feature", "properties": {"NOME": nome, "COR": cor_hex}, "geometry": {"type": "Point", "coordinates": [float(partes[0]), float(partes[1])]}})
+    try: 
+        df_notas = pd.read_excel(xls, sheet_name='NotasSisgb')
+    except: 
+        try: df_notas = pd.read_excel(xls, sheet_name='NOTAS')
+        except: df_notas = pd.DataFrame()
         
-        if features: return {"type": "FeatureCollection", "features": features}
-        return None
-    except: return None
-
-@st.cache_data(show_spinner=False)
-def get_kml_cached(path, color):
-    return ler_kml_para_geojson(path, color)
-
-def processar_um_kmz(f_name, f_bytes, base_map, geo_data):
-    dict_cores = {
-        'REDE PRIMÁRIA': '#e6194b', 'REDE PRIMARIA': '#e6194b',
-        'REDE SECUNDÁRIA': '#4363d8', 'REDE SECUNDARIA': '#4363d8',
-        'POSTE': '#808080', 'TRANSFORMADOR': '#f58231', 
-        'CHAVE': '#3cb44b', 'REGULADOR': '#911eb4', 
-        'RELIGADOR': '#46f0f0', 'CAPACITOR': '#ffe119',
-        'SUBESTAÇÃO': '#000000', 'SUBESTACAO': '#000000'
-    }
-
-    nome_arquivo = f_name.upper().replace('.KMZ', '').replace('.KML', '')
-    caminho_db = f"database/redes/{nome_arquivo}.pkl"
+    if not df_notas.empty and 'PROTOCOLO' in df_notas.columns:
+        df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).str.replace('.0', '', regex=False)
+        
+    try: 
+        df_dados = pd.read_excel(xls, sheet_name='DADOS', header=1)
+    except:
+        try: df_dados = pd.read_excel(xls, sheet_name='Dados', header=1)
+        except: df_dados = pd.DataFrame()
     
-    if os.path.exists(caminho_db): return None
-        
-    conteudo_kml = ""
-    if f_name.lower().endswith('.kmz'):
-        try:
-            with zipfile.ZipFile(io.BytesIO(f_bytes), 'r') as z:
-                for item in z.namelist():
-                    if item.lower().endswith('.kml'):
-                        conteudo_kml = z.read(item).decode('utf-8', errors='ignore')
-                        break
-        except Exception: return None
-    else:
-        try: conteudo_kml = f_bytes.decode('utf-8', errors='ignore')
-        except: return None
-    
-    conteudo_kml = re.sub(r'\sxmlns(:\w+)?="[^"]+"', '', conteudo_kml)
-    try: root = ET.fromstring(conteudo_kml)
-    except Exception: return None
-
-    municipio = "N/A"
-    regional = "N/A"
-    
-    mun_match = re.search(r'name=["\'](?:MUNICIPIO|CIDADE)["\'][^>]*>(.*?)</', conteudo_kml, re.IGNORECASE)
-    if mun_match: 
-        municipio = mun_match.group(1).strip().upper()
-        mun_norm = remove_accents(municipio)
-        if mun_norm in base_map:
-            regional = base_map[mun_norm]
-
-    if regional == "N/A":
-        reg_match = re.search(r'name=["\'](?:REGIONAL|REGIAO)["\'][^>]*>(.*?)</', conteudo_kml, re.IGNORECASE)
-        if reg_match: regional = reg_match.group(1).strip().upper()
-
-    if regional == "N/A":
-        sigla_match = re.search(r'\[([A-Z]{3})\]', nome_arquivo)
-        if sigla_match: regional = sigla_match.group(1)
-
-    registros_flat = []
-    primeira_coord = None
-    
-    for folder in root.findall('.//Folder'):
-        name_tag = folder.find('name')
-        if name_tag is not None and name_tag.text:
-            nome_pasta = name_tag.text.strip().upper()
-            if "CEMAR" in nome_pasta or nome_arquivo in nome_pasta: continue
-            cor_elemento = dict_cores.get(nome_pasta, '#333333')
-            
-            for placemark in folder.findall('.//Placemark'):
-                pm_name_tag = placemark.find('name')
-                nome_elemento = pm_name_tag.text.strip() if pm_name_tag is not None and pm_name_tag.text else "S/N"
-                
-                for ls in placemark.findall('.//LineString/coordinates'):
-                    if ls.text:
-                        coords = extrair_coordenadas_vis(ls.text)
-                        if len(coords) > 1:
-                            if not primeira_coord: primeira_coord = coords[0]
-                            registros_flat.append({
-                                'ALIMENTADOR': nome_arquivo, 'REGIONAL': regional, 'MUNICIPIO': municipio,
-                                'TIPO_GEOMETRIA': 'Linha', 'TIPO_REDE': nome_pasta, 'NOME': nome_elemento,
-                                'COORDS': coords, 'COR': cor_elemento
-                            })
-                        
-                for pt in placemark.findall('.//Point/coordinates'):
-                    if pt.text:
-                        coords = extrair_coordenadas_vis(pt.text)
-                        if len(coords) > 0:
-                            if not primeira_coord: primeira_coord = coords[0]
-                            registros_flat.append({
-                                'ALIMENTADOR': nome_arquivo, 'REGIONAL': regional, 'MUNICIPIO': municipio,
-                                'TIPO_GEOMETRIA': 'Ponto', 'TIPO_REDE': nome_pasta, 'NOME': nome_elemento,
-                                'COORDS': coords[0], 'COR': cor_elemento
-                            })
-    
-    if municipio == "N/A" and primeira_coord is not None and geo_data is not None:
-        mun_descob, reg_descob = get_municipio_by_coord(primeira_coord[1], primeira_coord[0], geo_data)
-        if mun_descob != "N/A":
-            municipio = mun_descob
-            regional = reg_descob if reg_descob != "N/A" else regional
-            for r in registros_flat:
-                r['MUNICIPIO'] = municipio
-                r['REGIONAL'] = regional
-
-    if registros_flat:
-        return (caminho_db, pd.DataFrame(registros_flat))
-    return None
-
-def processar_e_salvar_kmz_paralelo(arquivos):
-    base_map = load_base_mapping()
-    geo_data = get_base_geojson()
-    novos_processados = 0
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = []
-        for f in arquivos:
-            futures.append(executor.submit(processar_um_kmz, f.name, f.getvalue(), base_map, geo_data))
-        for future in futures:
-            resultado = future.result()
-            if resultado:
-                caminho_db, df_alimentador = resultado
-                df_alimentador.to_pickle(caminho_db)
-                novos_processados += 1
-    return novos_processados
-
-@st.cache_data(show_spinner=False)
-def carregar_banco_redes():
-    dfs = []
-    arquivos = [f for f in os.listdir("database/redes") if f.endswith('.pkl')]
-    for f in arquivos:
-        try: dfs.append(pd.read_pickle(f"database/redes/{f}"))
-        except: pass
-    if dfs: return pd.concat(dfs, ignore_index=True)
-    return pd.DataFrame()
-
-@st.cache_data(show_spinner=False)
-def carregar_e_cruzar_obras():
-    file_path = "BASE_LEVANTAMENTO_ATUALIZADA.xlsx"
-    if not os.path.exists(file_path):
-        return "Arquivo 'BASE_LEVANTAMENTO_ATUALIZADA.xlsx' não encontrado.", None, None
-        
-    try:
-        df_obras = pd.read_excel(file_path)
-        
-        status_sisco_col = next((c for c in df_obras.columns if 'STATUS SISCO' in str(c).upper()), None)
-        status_list_col = next((c for c in df_obras.columns if 'STATUS LIST' in str(c).upper()), None)
-        lat_col = next((c for c in df_obras.columns if 'LATITUDE' in str(c).upper() or 'LAT' == str(c).upper()), None)
-        lon_col = next((c for c in df_obras.columns if 'LONGITUDE' in str(c).upper() or 'LON' == str(c).upper()), None)
-        
-        if not all([status_sisco_col, status_list_col, lat_col, lon_col]):
-            return "Erro: Colunas obrigatórias ausentes na planilha (Status ou Coordenadas).", None, None
-            
-        if df_obras[lat_col].dtype == object: df_obras[lat_col] = df_obras[lat_col].astype(str).str.replace(',', '.')
-        if df_obras[lon_col].dtype == object: df_obras[lon_col] = df_obras[lon_col].astype(str).str.replace(',', '.')
-            
-        df_obras['LAT_CLEAN'] = pd.to_numeric(df_obras[lat_col], errors='coerce')
-        df_obras['LON_CLEAN'] = pd.to_numeric(df_obras[lon_col], errors='coerce')
-        df_obras = df_obras.dropna(subset=['LAT_CLEAN', 'LON_CLEAN'])
-        
-        mask_valid_coords = (
-            (df_obras['LAT_CLEAN'] != 0.0) & 
-            (df_obras['LON_CLEAN'] != 0.0) & 
-            (df_obras['LAT_CLEAN'] >= -35.0) & 
-            (df_obras['LAT_CLEAN'] <= 5.0) & 
-            (df_obras['LON_CLEAN'] >= -75.0) & 
-            (df_obras['LON_CLEAN'] <= -30.0)
-        )
-        df_obras = df_obras[mask_valid_coords]
-        
-        mask_concluida = df_obras[status_sisco_col].astype(str).str.contains('CONCLU', case=False, na=False)
-        df_concluidas = df_obras[mask_concluida].copy()
-        
-        def normalizar(x): return remove_accents(str(x)).upper().strip()
-        df_obras['STATUS_LIST_NORM'] = df_obras[status_list_col].apply(normalizar)
-        
-        status_alvos = ['0', 'EM LEVANTAMENTO', 'CORRECAO DE LEVANTAMENTO']
-        mask_andamento = df_obras['STATUS_LIST_NORM'].isin(status_alvos)
-        df_andamento = df_obras[mask_andamento & (~mask_concluida)].copy()
-        
-        df_andamento['CONFLITO'] = False
-        df_andamento['PROTOCOLO_CONFLITO'] = ""
-        df_andamento['DISTANCIA_CONFLITO'] = 0.0
-        
-        if not df_concluidas.empty and not df_andamento.empty:
-            def latlon_to_xyz(lat, lon):
-                R = 6371000.0
-                lat_rad, lon_rad = math.radians(lat), math.radians(lon)
-                return R * math.cos(lat_rad) * math.cos(lon_rad), R * math.cos(lat_rad) * math.sin(lon_rad), R * math.sin(lat_rad)
-            
-            pts_concluidas = [latlon_to_xyz(row['LAT_CLEAN'], row['LON_CLEAN']) for _, row in df_concluidas.iterrows()]
-            arvore_kdtree = cKDTree(pts_concluidas)
-            
-            conflitos_flags = []
-            conflitos_protos = []
-            conflitos_dists = []
-            
-            for _, row in df_andamento.iterrows():
-                xyz = latlon_to_xyz(row['LAT_CLEAN'], row['LON_CLEAN'])
-                _, idx_mais_proximo = arvore_kdtree.query(xyz)
-                
-                obra_concluida_proxima = df_concluidas.iloc[idx_mais_proximo]
-                distancia_exata_m = haversine(row['LAT_CLEAN'], row['LON_CLEAN'], obra_concluida_proxima['LAT_CLEAN'], obra_concluida_proxima['LON_CLEAN']) * 1000
-                
-                if distancia_exata_m <= 100:
-                    conflitos_flags.append(True)
-                    conflitos_protos.append(str(obra_concluida_proxima.get('PROTOCOLO', 'S/N')))
-                    conflitos_dists.append(distancia_exata_m)
-                else:
-                    conflitos_flags.append(False)
-                    conflitos_protos.append("")
-                    conflitos_dists.append(0.0)
-                    
-            df_andamento['CONFLITO'] = conflitos_flags
-            df_andamento['PROTOCOLO_CONFLITO'] = conflitos_protos
-            df_andamento['DISTANCIA_CONFLITO'] = conflitos_dists
-            
-        return "OK", df_concluidas, df_andamento
-        
-    except Exception as e:
-        return f"Erro processando dados: {str(e)}", None, None
-
+    return df_sisco, df_notas, df_dados
 
 # ==========================================
-# 2. INTERFACE E FILTROS DO SISTEMA
+# 2. LOGO NO TOPO E DADOS PADRÃO
 # ==========================================
-st.markdown("<h2 style='color: #0D256C;'>🗺️ Visualizador Oficial de Malha (Satélite Integrado)</h2>", unsafe_allow_html=True)
-st.markdown("O sistema usa **Inteligência Espacial** para descobrir o município e Scipy para pesquisa instantânea de coordenadas!")
 
-map_container = st.empty()
-table_container = st.container()
-
-df = carregar_banco_redes()
-base_map = load_base_mapping()
-geo_data_ibge = get_base_geojson()
-
-with st.sidebar:
-    st.markdown("### 📥 1. Upload de Redes (Em Lotes Seguros)")
-    arquivos_upados = st.file_uploader("Arraste novos KMZs aqui (Sem limite de quantidade)", type=["kmz", "kml"], accept_multiple_files=True)
+st.markdown("<br>", unsafe_allow_html=True) 
+if os.path.exists("LOGO_NIP.png"):
+    with open("LOGO_NIP.png", "rb") as image_file:
+        b64_logo = base64.b64encode(image_file.read()).decode()
     
-    if arquivos_upados:
-        if st.button(f"💾 Processar e Salvar {len(arquivos_upados)} Arquivo(s)", type="primary", use_container_width=True):
-            qtd_total_processados = 0
-            tamanho_lote = 3
-            total_lotes = math.ceil(len(arquivos_upados) / tamanho_lote)
-            
-            barra_progresso = st.progress(0.0)
-            texto_status = st.empty()
-            
-            for i in range(0, len(arquivos_upados), tamanho_lote):
-                lote_atual = (i // tamanho_lote) + 1
-                lote_arquivos = arquivos_upados[i:i+tamanho_lote]
-                texto_status.text(f"⏳ Processando Lote {lote_atual} de {total_lotes}...")
-                qtd_total_processados += processar_e_salvar_kmz_paralelo(lote_arquivos)
-                barra_progresso.progress(lote_atual / total_lotes)
-                gc.collect() 
-
-            if qtd_total_processados > 0:
-                st.success(f"✅ {qtd_total_processados} novos Alimentadores salvos!")
-                carregar_banco_redes.clear()
-                time.sleep(1.5)
-                st.rerun()
-            else:
-                st.info("Nenhum arquivo novo foi processado (já existiam no banco ou inválidos).")
-
-    st.markdown("---")
-    st.markdown("### 🔎 2. Pesquisas Inteligentes")
-    tab_nome, tab_coord = st.tabs(["📝 Por Nome/ID", "📍 Por Coordenada"])
-    
-    termo_pesquisa = ""
-    busca_lat = None
-    busca_lon = None
-    
-    with tab_nome:
-        termo_pesquisa = st.text_input("Nome/Num. Poste ou Trafo:", placeholder="Ex: 554930...").strip().upper()
-        
-    with tab_coord:
-        c_lat, c_lon = st.columns(2)
-        with c_lat:
-            lat_input = st.text_input("Latitude:", placeholder="Ex: -5.532")
-        with c_lon:
-            lon_input = st.text_input("Longitude:", placeholder="Ex: -47.432")
-            
-        if lat_input and lon_input:
-            try:
-                b_lat = float(lat_input.replace(',', '.').strip())
-                b_lon = float(lon_input.replace(',', '.').strip())
-                if -35.0 <= b_lat <= 5.0 and -75.0 <= b_lon <= -30.0:
-                    busca_lat = b_lat
-                    busca_lon = b_lon
-                else:
-                    st.warning("⚠️ Coordenada fora do Brasil.")
-            except:
-                st.warning("⚠️ Formato inválido. Use números.")
-
-    st.markdown("---")
-    st.markdown("### 🔍 3. Filtros Geográficos")
-    
-    lista_regioes = sorted(list(set(base_map.values()))) if base_map else ["CENTRO", "LESTE", "NOROESTE", "NORTE", "SUL"]
-    regioes_sel = st.multiselect("📍 Regional:", lista_regioes)
-    
-    lista_municipios = []
-    for mun, reg in base_map.items():
-        if not regioes_sel or reg in regioes_sel:
-            lista_municipios.append(mun)
-    lista_municipios = sorted(lista_municipios)
-    
-    municipios_sel = st.multiselect("🏙️ Município (Foco e Contorno):", lista_municipios)
-    
-    df_filt = df.copy()
-    if not df.empty:
-        if regioes_sel: df_filt = df_filt[df_filt['REGIONAL'].isin(regioes_sel)]
-        if municipios_sel: df_filt = df_filt[df_filt['MUNICIPIO'].isin(municipios_sel)]
-    
-    lista_alimentadores = sorted(df_filt['ALIMENTADOR'].unique().tolist()) if not df_filt.empty else []
-    alim_sel = st.multiselect("⚡ Alimentador:", lista_alimentadores)
-    alimentadores_visiveis = alim_sel if alim_sel else lista_alimentadores
-
-    camadas_ativas = {}
-    if not df.empty:
-        st.markdown("---")
-        st.markdown("### 🗂️ 4. Camadas (Desempenho)")
-        for alim in alimentadores_visiveis:
-            st.markdown(f"**{alim}**")
-            lista_camadas_alim = sorted(df[df['ALIMENTADOR'] == alim]['TIPO_REDE'].unique().tolist())
-            camadas_essenciais = ['REDE PRIMÁRIA', 'REDE PRIMARIA', 'REDE SECUNDÁRIA', 'REDE SECUNDARIA', 'TRANSFORMADOR', 'POSTE', 'CAPACITOR', 'CHAVE', 'REGULADOR', 'RELIGADOR', 'SUBESTAÇÃO', 'SUBESTACAO']
-            camadas_default = [c for c in lista_camadas_alim if c in camadas_essenciais]
-            camadas_ativas[alim] = st.multiselect("Visibilidade:", lista_camadas_alim, default=camadas_default, key=f"ms_{alim}")
-            
-    st.markdown("---")
-    st.markdown("### 🗺️ 5. Áreas Especiais")
-    mostrar_quilombos = st.checkbox("🟠 Áreas Quilombolas", value=False)
-    mostrar_indigenas = st.checkbox("🟢 Terras Indígenas", value=False)
-    mostrar_arqueologia = st.checkbox("🔵 Sítios Arqueológicos", value=False)
-    mostrar_uc_federal = st.checkbox("🟡 UC Federal", value=False)
-    mostrar_uc_estadual = st.checkbox("🟡 UC Estadual", value=False)
-    mostrar_uc_municipal = st.checkbox("🟡 UC Municipal", value=False)
-    
-    st.markdown("---")
-    st.markdown("### 🚧 6. Obras e Projetos")
-    mostrar_concluidas = st.checkbox("🔵 OBRAS CONCLUÍDAS", value=False)
-    mostrar_conflitantes = st.checkbox("🚨 OBRAS CONFLITANTES", value=False)
-    
-    msg_obras, df_concluidas, df_andamento = "OK", None, None
-    if mostrar_concluidas or mostrar_conflitantes:
-        msg_obras, df_concluidas, df_andamento = carregar_e_cruzar_obras()
-        if msg_obras != "OK":
-            st.sidebar.warning(f"⚠️ {msg_obras}")
-        else:
-            qtd_conflitos = df_andamento['CONFLITO'].sum()
-            
-            if mostrar_concluidas:
-                st.sidebar.success(f"🔵 {len(df_concluidas)} Concluídas no mapa")
-            if mostrar_conflitantes:
-                if qtd_conflitos > 0:
-                    st.sidebar.error(f"🚨 {qtd_conflitos} CONFLITOS MAPEADOS!")
-                else:
-                    st.sidebar.success("🎉 Nenhuma obra em conflito!")
-            
-    st.markdown("---")
-    st.markdown("### 🗑️ Gerenciar Malha Local")
-    alim_para_deletar = st.selectbox("Apagar Alimentador do Banco:", ["Selecione..."] + sorted(df['ALIMENTADOR'].unique().tolist()) if not df.empty else ["Selecione..."])
-    if alim_para_deletar != "Selecione...":
-        if st.button("❌ Excluir Permanentemente", use_container_width=True):
-            caminho_del = f"database/redes/{alim_para_deletar}.pkl"
-            if os.path.exists(caminho_del):
-                os.remove(caminho_del)
-                carregar_banco_redes.clear()
-                st.success("Excluído!")
-                time.sleep(1)
-                st.rerun()
-
-# ==========================================
-# 3. CONSTRUÇÃO DO MAPA FOLIUM (BASE)
-# ==========================================
-mapa = folium.Map(location=[-5.2, -45.0], zoom_start=6, tiles=None, prefer_canvas=True)
-
-folium.TileLayer(
-    tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-    attr='Google',
-    name='Satélite (Google Maps)',
-    overlay=False,
-    control=True,
-    max_zoom=20
-).add_to(mapa)
-
-folium.TileLayer(
-    tiles='OpenStreetMap',
-    name='Mapa Base (Limpo)',
-    overlay=False,
-    control=True,
-    max_zoom=20
-).add_to(mapa)
-
-if geo_data_ibge:
-    def style_function(feature):
-        reg_mun = feature['properties'].get('MUNICIPIO', '')
-        reg_name = feature['properties'].get('REGIONAL', '')
-        cor_regiao = feature['properties']['fillColor']
-        
-        if municipios_sel:
-            if reg_mun in municipios_sel: return {'fillColor': 'transparent', 'color': '#FF00FF', 'weight': 4, 'fillOpacity': 0}
-            else: return {'fillColor': 'transparent', 'color': 'transparent', 'weight': 0}
-        
-        elif regioes_sel:
-            if reg_name in regioes_sel: return {'fillColor': cor_regiao, 'color': cor_regiao, 'weight': 1, 'fillOpacity': 0.75}
-            else: return {'fillColor': 'transparent', 'color': 'transparent', 'weight': 0}
-        
-        return {'fillColor': cor_regiao, 'color': cor_regiao, 'weight': 1, 'fillOpacity': 0.75}
-
-    folium.GeoJson(
-        geo_data_ibge,
-        name="Divisão IBGE (Maranhão)",
-        style_function=style_function,
-        tooltip=folium.features.GeoJsonTooltip(fields=['name', 'REGIONAL'], aliases=['Município:', 'Regional:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;"),
-        zoom_on_click=False,
-        show=True
-    ).add_to(mapa)
-
-    map_id = mapa.get_name()
-    js_zoom_hide = f"""
-    <script>
-        setTimeout(function() {{
-            var ibge_layer_{map_id} = null;
-            {map_id}.eachLayer(function(layer) {{
-                if (layer.options && layer.options.name === 'Divisão IBGE (Maranhão)') {{
-                    ibge_layer_{map_id} = layer;
-                }}
-            }});
-            {map_id}.on('zoomend', function() {{
-                if (ibge_layer_{map_id}) {{
-                    if ({map_id}.getZoom() > 9) {{
-                        if ({map_id}.hasLayer(ibge_layer_{map_id})) {{ {map_id}.removeLayer(ibge_layer_{map_id}); }}
-                    }} else {{
-                        if (!{map_id}.hasLayer(ibge_layer_{map_id})) {{ {map_id}.addLayer(ibge_layer_{map_id}); }}
-                    }}
-                }}
-            }});
-        }}, 500);
-    </script>
-    """
-    mapa.get_root().html.add_child(folium.Element(js_zoom_hide))
-
-todas_lats, todas_lons = [], []
-busca_lats, busca_lons = [], []
-
-if not df.empty:
-    df_mapa = df.copy()
-    if regioes_sel: df_mapa = df_mapa[df_mapa['REGIONAL'].isin(regioes_sel)]
-    if municipios_sel: df_mapa = df_mapa[df_mapa['MUNICIPIO'].isin(municipios_sel)]
-    df_mapa = df_mapa[df_mapa['ALIMENTADOR'].isin(alimentadores_visiveis)]
-
-    mask_camadas = pd.Series(False, index=df_mapa.index)
-    for alim in alimentadores_visiveis:
-        if alim in camadas_ativas: mask_camadas = mask_camadas | ((df_mapa['ALIMENTADOR'] == alim) & (df_mapa['TIPO_REDE'].isin(camadas_ativas[alim])))
-    df_mapa = df_mapa[mask_camadas]
-
-    df_busca = pd.DataFrame()
-    nearest_idx = None
-
-    if busca_lat is not None and busca_lon is not None and not df_mapa.empty:
-        def latlon_to_xyz(lat, lon):
-            R = 6371.0
-            lat_rad, lon_rad = math.radians(lat), math.radians(lon)
-            return R * math.cos(lat_rad) * math.cos(lon_rad), R * math.cos(lat_rad) * math.sin(lon_rad), R * math.sin(lat_rad)
-
-        pts, indices = [], []
-        for idx, row in df_mapa.iterrows():
-            if row['TIPO_GEOMETRIA'] == 'Ponto':
-                pts.append(latlon_to_xyz(row['COORDS'][0], row['COORDS'][1]))
-                indices.append(idx)
-            else:
-                for pt in row['COORDS']:
-                    pts.append(latlon_to_xyz(pt[0], pt[1]))
-                    indices.append(idx)
-                    
-        if pts:
-            tree = cKDTree(pts)
-            target_xyz = latlon_to_xyz(busca_lat, busca_lon)
-            dist_3d, min_idx_in_pts = tree.query(target_xyz)
-            nearest_idx = indices[min_idx_in_pts]
-            
-            elem_prox = df_mapa.loc[nearest_idx]
-            if elem_prox['TIPO_GEOMETRIA'] == 'Ponto': dist_metros = haversine(busca_lat, busca_lon, elem_prox['COORDS'][0], elem_prox['COORDS'][1]) * 1000
-            else: dist_metros = min([haversine(busca_lat, busca_lon, pt[0], pt[1]) for pt in elem_prox['COORDS']]) * 1000
-            
-            st.sidebar.success(f"🎯 **Alvo mais próximo:** {elem_prox['TIPO_REDE']} ({elem_prox['NOME']}) a {dist_metros:.1f} metros.")
-            df_busca = df_mapa.loc[[nearest_idx]]
-            df_mapa = df_mapa.drop(nearest_idx)
-
-    elif termo_pesquisa != "":
-        mask_nome = df_mapa['NOME'].astype(str).str.contains(termo_pesquisa, case=False, na=False)
-        df_busca = df_mapa[mask_nome]
-        df_mapa = df_mapa[~mask_nome]
-
-    features = []
-    for _, row in df_mapa.iterrows():
-        coord_txt = f"{row['COORDS'][0]:.5f}, {row['COORDS'][1]:.5f}" if row['TIPO_GEOMETRIA'] == 'Ponto' else "Linha de Múltiplos Pontos"
-        prop = {
-            "TIPO_REDE": str(row['TIPO_REDE']), "NOME": str(row['NOME']), "ALIMENTADOR": str(row['ALIMENTADOR']),
-            "MUNICIPIO": f"{row['MUNICIPIO']} - {row['REGIONAL']}", "GPS": coord_txt, "COR": row['COR']
-        }
-        
-        if row['TIPO_GEOMETRIA'] == 'Linha':
-            coords = [[pt[1], pt[0]] for pt in row['COORDS']]
-            geom = {"type": "LineString", "coordinates": coords}
-            for pt in row['COORDS']: todas_lats.append(pt[0]); todas_lons.append(pt[1])
-        else:
-            coords = [row['COORDS'][1], row['COORDS'][0]]
-            geom = {"type": "Point", "coordinates": coords}
-            todas_lats.append(row['COORDS'][0]); todas_lons.append(row['COORDS'][1])
-            
-        features.append({"type": "Feature", "geometry": geom, "properties": prop})
-
-    if features:
-        geojson_data = {"type": "FeatureCollection", "features": features}
-        def style_fn(feature):
-            cor = feature['properties']['COR']
-            tipo = feature['properties']['TIPO_REDE']
-            if feature['geometry']['type'] == 'LineString': return {'color': cor, 'weight': 4 if 'PRIM' in tipo else 3, 'opacity': 0.8}
-            else: 
-                raio = 6
-                if 'POSTE' in tipo: raio = 6
-                elif any(x in tipo for x in ['TRANSFORMADOR', 'CHAVE', 'REGULADOR', 'RELIGADOR', 'SUBESTA', 'CAPACITOR']): raio = 12
-                return {'color': cor, 'fillColor': cor, 'fillOpacity': 1.0, 'radius': raio, 'weight': 2}
-
-        folium.GeoJson(
-            geojson_data, name="Rede Elétrica", style_function=style_fn, marker=folium.CircleMarker(radius=6, fill=True, fillOpacity=1),
-            tooltip=folium.features.GeoJsonTooltip(fields=['TIPO_REDE', 'NOME'], aliases=['Rede:', 'Identificação:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 5px;"),
-            popup=folium.features.GeoJsonPopup(fields=['TIPO_REDE', 'NOME', 'ALIMENTADOR', 'MUNICIPIO', 'GPS'], aliases=['Rede:', 'Identificação:', 'Alimentador:', 'Localização:', 'Coordenadas:'], style="font-family: sans-serif; font-size: 13px; min-width: 250px;")
-        ).add_to(mapa)
-
-    fg_busca = folium.FeatureGroup(name="Resultado da Pesquisa", show=True)
-    for _, row in df_busca.iterrows():
-        coord_txt = f"{row['COORDS'][0]:.5f}, {row['COORDS'][1]:.5f}" if row['TIPO_GEOMETRIA'] == 'Ponto' else "Linha de Múltiplos Pontos"
-        html_popup = f"""
-        <div style="min-width: 250px; font-family: sans-serif;">
-            <h4 style="margin-top: 0; color: #FF00FF; border-bottom: 2px solid #FF00FF; padding-bottom: 5px;">{row['TIPO_REDE']}</h4>
-            <table style="width:100%;">
-                <tr><td style="color: #555; padding: 2px;"><b>IDENTIFICAÇÃO:</b></td><td>{html.escape(str(row['NOME']))}</td></tr>
-                <tr><td style="color: #555; padding: 2px;"><b>ALIMENTADOR:</b></td><td>{html.escape(str(row['ALIMENTADOR']))}</td></tr>
-                <tr><td style="color: #555; padding: 2px;"><b>LOCAL:</b></td><td>{html.escape(str(row['MUNICIPIO']))} - {row['REGIONAL']}</td></tr>
-                <tr><td style="color: #555; padding: 2px;"><b>GPS:</b></td><td>{coord_txt}</td></tr>
-            </table>
+    st.markdown(f'''
+        <div style="text-align: center; margin-bottom: 10px;">
+            <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
         </div>
-        """
-        popup = folium.Popup(html_popup, max_width=350)
-        if row['TIPO_GEOMETRIA'] == 'Linha':
-            folium.PolyLine(locations=row['COORDS'], color='#FF00FF', weight=8, opacity=1.0, popup=popup, tooltip=f"ALVO ENCONTRADO: {html.escape(str(row['NOME']))}").add_to(fg_busca)
-            for pt in row['COORDS']: busca_lats.append(pt[0]); busca_lons.append(pt[1])
-        else:
-            folium.Marker(location=row['COORDS'], icon=folium.Icon(color='purple', icon='star'), popup=popup, tooltip=f"ALVO ENCONTRADO: {html.escape(str(row['NOME']))}").add_to(fg_busca)
-            busca_lats.append(row['COORDS'][0]); busca_lons.append(row['COORDS'][1])
+    ''', unsafe_allow_html=True)
 
-    if busca_lat is not None and busca_lon is not None:
-        folium.Marker(location=[busca_lat, busca_lon], icon=folium.Icon(color='orange', icon='map-pin', prefix='fa'), tooltip="Sua Pesquisa GPS").add_to(fg_busca)
+# Colunas ajustadas para reduzir o botão e mantê-lo centralizado
+col_btn1, col_btn2, col_btn3 = st.columns([3.5, 1.5, 3.5])
+with col_btn2:
+    st.button("🧹 LIMPAR CAMPOS", on_click=limpar_campos_manuais, use_container_width=True)
 
-    fg_busca.add_to(mapa)
+st.markdown("<br>", unsafe_allow_html=True)
 
-if mostrar_quilombos:
-    geo_q = get_kml_cached("assets/quilombos.kml", "#ff7f00")
-    if geo_q: folium.GeoJson(geo_q, name="Áreas Quilombolas", style_function=lambda x: {'fillColor': x['properties']['COR'], 'color': x['properties']['COR'], 'weight': 2, 'fillOpacity': 0.4}, tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['Quilombo:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
+lista_tipos_obra = ['AF-AMPLIAÇÃO DE FASE', 'AP-AMPLIAÇÃO DE POTENCIA', 'CA-CONSTRUÇÃO DE AL', 'CT-CONSTRUÇÃO DE RD', 'DV-DIVISÃO DE CIRCUITO', 'FC-FLEXIBILIZAÇÃO DE CIRCUITO', 'IE-INSTALAÇÃO DE EQUIPAMENTOS', 'IT-INSTALAÇÃO DE TRANSFORMADORES', 'ME-MELHORIA DE REDE DE DISTRIBUIÇÃO', 'MI-MICROSSISTEMA ISOLADO DE GERAÇÃO DE ENERGIA', 'MP-REALOCAÇÃO DE POSTE', 'MT-REALOCAÇÃO DE TRANSFORMADORES RD', 'RC-RECAPACITAÇÃO DE CONDUTORES', 'RE-RECAPACITAÇÃO DE EQUIPAMENTOS DE RD', 'RF-RECAPACITAÇÃO DE C,FA, C,FU E PR', 'RP-RECAPACITAÇÃO DE POSTES', 'RT-RECAPACITAÇÃO DE TRANSFORMADOR DE RD', 'SI-SISTEMA INDIVIDUAL DE GERAÇÃO DE ENERGIA', 'TE-REALOCAÇÃO DE EQUIPAMENTOS']
+lista_pi = ['ASC', 'ATV', 'BCP', 'BRE', 'BRT', 'CCF', 'DIF', 'DIS', 'EME', 'ERD', 'EUR', 'FIM', 'INC', 'INR', 'LPT', 'MBT', 'MCJ', 'MCR', 'MEL', 'MGD', 'MMT', 'MRS', 'MSE', 'MTP', 'NIV', 'OCP', 'ODS', 'PMC', 'REF', 'REG', 'SEG', 'SEQ', 'SID', 'SLS', 'SMC', 'TRI', 'UNI', 'UNP', 'UNR']
+lista_mun = ['AAM-ALTO ALEGRE DO MARANHAO', 'AAP-ALTO ALEGRE DO PINDARE', 'ACL-ACAILANDIA', 'ACT-ALCANTARA', 'ADA-ALDEIAS ALTAS', 'ADM-AGUA DOCE DO MARANHAO', 'AFC-AFONSO CUNHA', 'ALM-ALTAMIRA DO MARANHAO', 'ALP-ALTO PARNAIBA', 'AME-ARAME', 'AMM-AMAPA DO MARANHAO', 'AMO-AMARANTE DO MARANHAO', 'ANA-ANAJATUBA', 'ANS-ANAPURUS', 'API-APICUM-ACU', 'ARA-ARAGUANA', 'ARI-ARARI', 'ARS-ARAIOSES', 'AXX-AXIXA', 'BAC-BACURI', 'BBR-BURITI BRAVO', 'BCA-BACABEIRA', 'BCB-BACABAL', 'BCP-BURITICUPU', 'BCT-BACURITUBA', 'BDC-BARRA DO CORDA', 'BEM-BERNARDO DO MEARIM', 'BGU-BELAGUA', 'BIV-BURITI', 'BJA-BREJO DE AREIA', 'BJD-BOM JARDIM', 'BJO-BREJO', 'BJS-BOM JESUS DAS SELVAS', 'BJU-BARAO DE GRAJAU', 'BLE-BENEDITO LEITE', 'BLS-BALSAS', 'BLU-BOM LUGAR', 'BQM-BEQUIMAO', 'BRN-BARREIRINHAS', 'BUT-BURITIRANA', 'BVG-BOA VISTA DO GURUPI', 'BVM-BELA VISTA DO MARANHAO', 'CAM-CAMPESTRE DO MARANHAO', 'CAN-CANDIDO MENDES', 'CAR-CAROLINA', 'CDL-CEDRAL', 'CGE-CENTRO DO GUILHERME', 'CGR-CACHOEIRA GRANDE', 'CHA-CHAPADINHA', 'CHE-CANTANHEDE', 'CID-CIDELANDIA', 'CJI-CAJARI', 'CJO-CAJAPIO', 'CLA-CONCEICAO DO LAGO-ACU', 'CMA-CENTRAL DO MARANHAO', 'CNM-CENTRO NOVO DO MARANHAO', 'CNO-COELHO NETO', 'COL-COLINAS', 'COO-CODO', 'CPN-CAPINZAL DO NORTE', 'CRA-COROATA', 'CRP-CURURUPU', 'CTP-CARUTAPERA', 'CXS-CAXIAS', 'DAV-DAVINOPOLIS', 'DBA-DUQUE BACELAR', 'DPO-DOM PEDRO', 'ESP-ESPERANTINOPOLIS', 'ETE-ESTREITO', 'FFA-FERNANDO FALCAO', 'FNM-FEIRA NOVA DO MARANHAO', 'FOR-FORTUNA', 'FSN-FORMOSA DA SERRA NEGRA', 'FTN-FORTALEZA DOS NOGUEIRAS', 'GDV-GODOFREDO VIANA', 'GEB-GOVERNADOR EUGENIO BARROS', 'GEL-GOVERNADOR EDISON LOBAO', 'GJU-GRAJAU', 'GLR-GOVERNADOR LUIZ ROCHA', 'GNB-GOVERNADOR NEWTON BELLO', 'GNF-GOVERNADOR NUNES FREIRE', 'GOA-GOVERNADOR ARCHER', 'GOD-GONCALVES DIAS', 'GRA-GRACA ARANHA', 'GUI-GUIMARAES', 'HUC-HUMBERTO DE CAMPOS', 'ICT-ICATU', 'IGG-IGARAPE GRANDE', 'IGM-IGARAPE DO MEIO', 'IPG-ITAIPAVA DO GRAJAU', 'IPZ-IMPERATRIZ', 'ITG-ITINGA DO MARANHAO', 'ITM-ITAPECURU MIRIM', 'JAT-JATOBA', 'JEV-JENIPAPO DOS VIEIRAS', 'JLB-JOAO LISBOA', 'JOS-JOSELANDIA', 'JUM-JUNCO DO MARANHAO', 'LAM-LAGOA DO MATO', 'LAN-LAJEADO NOVO', 'LGJ-LAGO DO JUNCO', 'LGM-LAGOA GRANDE DO MARANHAO', 'LGR-LAGO DOS RODRIGUES', 'LGV-LAGO VERDE', 'LIC-LIMA CAMPOS', 'LPD-LAGO DA PEDRA', 'LRT-LORETO', 'LUD-LUIS DOMINGUES', 'MAA-MAGALHAES DE ALMEIDA', 'MAL-MONTES ALTOS', 'MHO-MARANHAOZINHO', 'MIL-MILAGRES DO MARANHAO', 'MIR-MIRINZAL', 'MJS-MARAJA DO SENA', 'MME-MARACACUME', 'MON-MONCAO', 'MRA-MIRANDA DO NORTE', 'MRD-MIRADOR', 'MRR-MORROS', 'MTA-MATINHA', 'MTN-MATOES DO NORTE', 'MTR-MATA ROMA', 'MTS-MATOES', 'NCO-NOVA COLINAS', 'NIO-NOVA IORQUE', 'NRO-NINA RODRIGUES', 'NVO-NOVA OLINDA DO MARANHAO', "ODC-OLHO D'AGUA DAS CUNHAS", 'ONO-OLINDA NOVA DO MARANHAO', 'PAB-PASTOS BONS', 'PAF-PASSAGEM FRANCA', 'PAR-PAULO RAMOS', 'PCL-PACO DO LUMIAR', 'PCZ-PRIMEIRA CRUZ', 'PDR-PEDRO DO ROSARIO', 'PDS-PEDREIRAS', 'PDT-PRESIDENTE DUTRA', 'PFO-PORTO FRANCO', 'PHO-PINHEIRO', 'PIO-PIO XII', 'PJU-PRESIDENTE JUSCELINO', 'PMA-PALMEIRANDIA', 'PME-PRESIDENTE MEDICI', 'PMI-PINDARE-MIRIM', 'PNA-PARNARAMA', 'PNL-PENALVA', 'PNV-PAULINO NEVES', 'PPE-PIRAPEMAS', 'PPS-POCAO DE PEDRAS', 'PRB-PARAIBANO', 'PRM-PERI MIRIM', 'PRO-PERITORO', 'PSY-PRESIDENTE SARNEY', 'PTR-PORTO RICO DO MARANHAO', 'PVA-PRESIDENTE VARGAS', 'RAP-RAPOSA', 'RCO-RIACHAO', 'RFQ-RIBAMAR FIQUENE', 'RSO-ROSARIO', 'SAL-SANTO ANTONIO DOS LOPES', 'SAM-SANTO AMARO DO MARANHAO', 'SAR-SAO ROBERTO', 'SBN-SAO BERNARDO', 'SBR-SAO BENEDITO DO RIO PRETO', 'SBT-SAO BENTO', 'SBZ-SAO RAIMUNDO DO DOCA BEZERRA', 'SDM-SAO DOMINGOS DO MARANHAO', 'SDZ-SAO DOMINGOS DO AZEITAO', 'SER-SERRANO DO MARANHAO', 'SFB-SAO FELIX DE BALSAS', 'SFH-SAO FRANCISCO DO MARANHAO', 'SFJ-SAO FRANCISCO DO BREJAO', 'SFM-SANTA FILOMENA DO MARANHAO', 'SGM-SAO LUIS GONZAGA DO MARANHAO', 'SHL-SANTA HELENA', 'SJA-SAO JOAO BATISTA', 'SJB-SAO JOSE DOS BASILIOS', 'SJC-SAO JOAO DO CARU', 'SJI-SAO JOAO DO PARAISO', 'SJP-SAO JOAO DOS PATOS', 'SJR-SAO JOSE DE RIBAMAR', 'SJS-SAO JOAO DO SOTER', 'SLR-SENADOR LA ROCQUE', 'SLS-SAO LUIS', 'SMB-SAMBAIBA', 'SMH-SANTANA DO MARANHAO', 'SMT-SAO MATEUS DO MARANHAO', 'SNO-SITIO NOVO', 'SPB-SAO PEDRO DA AGUA BRANCA', 'SPC-SAO PEDRO DOS CRENTES', 'SQM-SANTA QUITERIA DO MARANHAO', 'SRI-SANTA RITA', 'SRM-SAO RAIMUNDO DAS MANGABEIRAS', 'STH-SATUBINHA', 'STI-SANTA INES', 'STL-SANTA LUZIA', 'STP-SANTA LUZIA DO PARUA', 'SUN-SUCUPIRA DO NORTE', 'SUR-SUCUPIRA DO RIACHAO', 'SVF-SAO VICENTE FERRER', 'SXC-SENADOR ALEXANDRE COSTA', 'TBR-TIMBIRAS', 'TFG-TASSO FRAGOSO', 'TMO-TIMON', 'TRL-TURILANDIA', 'TTA-TUTOIA', 'TTM-TUNTUM', 'TUF-TUFILANDIA', 'TUR-TURIACU', 'TVA-TRIZIDELA DO VALE', 'UBS-URBANO SANTOS', 'VFR-VITORINO FREIRE', 'VGG-VARGEM GRANDE', 'VNA-VIANA', 'VNM-VILA NOVA DOS MARTIRIOS', 'VTM-VITORIA DO MEARIM', 'ZDC-ZE DOCA']
+lista_id = ['AL-Alimentador Tronco', 'BA-Barramento', 'CC-Conta Contrato', 'CO-Numero Componente', 'ID-IDENTIFICADOR', 'NR-Nota de Reclamação', 'NS-Nota CCS', 'OC-Ocorrência', 'OS-Ordem de Serviço', 'PF-CPF do cliente', 'PG-Ponto Geográfico', 'PT-Parecer Técnico', 'TR-Tempo Real']
 
-if mostrar_indigenas:
-    geo_i = get_kml_cached("assets/indigenas.kml", "#2ca02c")
-    if geo_i: folium.GeoJson(geo_i, name="Terras Indígenas", style_function=lambda x: {'fillColor': x['properties']['COR'], 'color': x['properties']['COR'], 'weight': 2, 'fillOpacity': 0.4}, tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['Terra Indígena:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
+arquivo_bd = st.sidebar.file_uploader("📥 Suba a planilha base (CRIAR NOME DA OBRA.xlsx)", type=["xlsx"])
 
-if mostrar_arqueologia:
-    geo_a = get_kml_cached("assets/arqueologia.kml", "#1f77b4")
-    if geo_a: folium.GeoJson(geo_a, name="Sítios Arqueológicos", marker=folium.CircleMarker(radius=6, fill=True, fillOpacity=1, color="#1f77b4"), tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['Sítio:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
+df_sisco, df_notas, df_dados = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+map_tipo_obra, map_mun = {}, {}
 
-if mostrar_uc_federal:
-    geo_uc_fed = get_kml_cached("assets/uc_federal.kml", "#e6b800")
-    if geo_uc_fed: folium.GeoJson(geo_uc_fed, name="UC Federal", style_function=lambda x: {'fillColor': x['properties']['COR'], 'color': x['properties']['COR'], 'weight': 2, 'fillOpacity': 0.4}, tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['UC Federal:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
+if arquivo_bd:
+    with st.spinner("Carregando banco de dados..."):
+        df_sisco, df_notas, df_dados = carregar_dados(arquivo_bd)
+        
+    if not df_dados.empty:
+        if 'TIPO DE OBRA' in df_dados.columns: lista_tipos_obra = sorted(df_dados['TIPO DE OBRA'].dropna().unique().tolist())
+        if 'PI' in df_dados.columns: lista_pi = sorted(df_dados['PI'].dropna().unique().tolist())
+        if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
+        if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted([str(x).replace('.0', '') for x in df_dados['ID DO NUMERO'].dropna().unique().tolist()])
 
-if mostrar_uc_estadual:
-    geo_uc_est = get_kml_cached("assets/uc_estadual.kml", "#ffff00")
-    if geo_uc_est: folium.GeoJson(geo_uc_est, name="UC Estadual", style_function=lambda x: {'fillColor': x['properties']['COR'], 'color': x['properties']['COR'], 'weight': 2, 'fillOpacity': 0.4}, tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['UC Estadual:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
+        if 'TIPO DE OBRA NO SISCO' in df_dados.columns and 'SIGLA' in df_dados.columns:
+            df_to = df_dados.dropna(subset=['TIPO DE OBRA NO SISCO', 'SIGLA'])
+            map_tipo_obra = dict(zip(df_to['TIPO DE OBRA NO SISCO'].astype(str).apply(remover_acentos), df_to['SIGLA'].astype(str).str.strip().str.upper()))
+            
+        if 'MUNICIPIO' in df_dados.columns and 'SIGLA.1' in df_dados.columns:
+            df_mu = df_dados.dropna(subset=['MUNICIPIO', 'SIGLA.1'])
+            map_mun = dict(zip(df_mu['MUNICIPIO'].astype(str).apply(remover_acentos), df_mu['SIGLA.1'].astype(str).str.strip().str.upper()))
 
-if mostrar_uc_municipal:
-    geo_uc_mun = get_kml_cached("assets/uc_municipal.kml", "#ffea70")
-    if geo_uc_mun: folium.GeoJson(geo_uc_mun, name="UC Municipal", style_function=lambda x: {'fillColor': x['properties']['COR'], 'color': x['properties']['COR'], 'weight': 2, 'fillOpacity': 0.4}, tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['UC Municipal:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;")).add_to(mapa)
-
+c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
 
 # ==========================================
-# CAMADAS DE OBRAS OTIMIZADAS
+# COLUNA 1 - SOLICITAÇÕES EM LOTE E FILTRO
 # ==========================================
-dados_tabela_conflito = []
-
-if (mostrar_concluidas or mostrar_conflitantes) and msg_obras == "OK":
+with c1:
+    st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
     
-    # 1. Desenha Obras Concluídas (SE A CAIXA ESTIVER MARCADA)
-    if mostrar_concluidas and df_concluidas is not None:
-        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas", show=True)
-        for _, row in df_concluidas.iterrows():
-            protocolo = str(row.get('PROTOCOLO', 'S/N'))
-            lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
-            municipio = str(row.get('MUNICIPIO', 'S/N'))
-            cor_concluida = '#1f77b4' # Azul
-            
-            html_popup = f"""
-            <div style="min-width: 200px; font-family: sans-serif;">
-                <h4 style="margin-top: 0; color: {cor_concluida}; border-bottom: 2px solid {cor_concluida}; padding-bottom: 5px;">Obra Concluída</h4>
-                <table style="width:100%;">
-                    <tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(protocolo)}</td></tr>
-                    <tr><td style="color: #555; padding: 2px;"><b>MUNICÍPIO:</b></td><td>{html.escape(municipio)}</td></tr>
-                </table>
-            </div>
-            """
-            
-            folium.CircleMarker(
-                location=[lat, lon], radius=4, color='black', weight=1, fill=True, fillColor=cor_concluida, fillOpacity=1
-            ).add_to(fg_concluidas)
-            
-            folium.Circle(
-                location=[lat, lon], radius=100, color=cor_concluida, weight=2, fill=True, fillColor=cor_concluida, fillOpacity=0.25, 
-                tooltip=f"Obra Concluída: {html.escape(protocolo)}", popup=folium.Popup(html_popup, max_width=300)
-            ).add_to(fg_concluidas)
-            
-        fg_concluidas.add_to(mapa)
-            
-    # 2. Desenha Obras em Andamento Conflitantes (SE A CAIXA ESTIVER MARCADA)
-    if mostrar_conflitantes and df_andamento is not None:
-        fg_andamento = folium.FeatureGroup(name="Obras Conflitantes", show=True)
+    st.markdown("<div style='padding: 8px 0px;'>", unsafe_allow_html=True)
+    notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
+    
+    solicitacoes = []
+    notas_removidas = []
+    
+    if sols_input and sols_input.strip():
+        parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
         
-        for _, row in df_andamento.iterrows():
-            # Filtra apenas quem tem conflito
-            if not row['CONFLITO']:
-                continue
+        notas_processadas = []
+        for sol in parts:
+            fase_sol = "MO"
+            pi_sol = ""
+            status_sap_temp = ""
+            
+            if not df_sisco.empty:
+                r_s = df_sisco[df_sisco['Nota CCS'] == sol]
+                if not r_s.empty:
+                    f_temp = str(r_s.iloc[0].get('FASE', 'MO')).upper()
+                    if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                        fase_sol = f_temp
+                    pi_sol = str(r_s.iloc[0].get('Tipo de Projeto(PI)', ''))
+            
+            if not df_notas.empty:
+                r_n = df_notas[df_notas['PROTOCOLO'] == sol]
+                if not r_n.empty:
+                    f_temp = str(r_n.iloc[0].get('FASE', 'MO')).upper()
+                    if fase_sol == "MO" and f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                        fase_sol = f_temp
+                    if not pi_sol or pi_sol.lower() == 'nan':
+                        pi_sol = str(r_n.iloc[0].get('TIPO LIGAÇÃO', r_n.iloc[0].get('TIPO NOTA', '')))
+                    status_sap_temp = str(r_n.iloc[0].get('STATUS SAP', '')).strip().upper()
+            
+            # Filtro Inteligente: Separa CANC e FINL
+            if status_sap_temp in ['CANC', 'FINL']:
+                notas_removidas.append(f"❌ {sol} ({status_sap_temp})")
+            else:
+                if pi_sol.lower() == 'nan': pi_sol = ""
+                notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
+            
+        pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
+        aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
+        
+        if aplicar_regra_tr:
+            tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
+            outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
+            
+            if tr_notes:
+                escolhida_tr = random.choice(tr_notes)
+                tr_notes.remove(escolhida_tr)
+                solicitacoes = [escolhida_tr] + tr_notes + outras_notes
+            else:
+                solicitacoes = [n['sol'] for n in notas_processadas]
+        else:
+            solicitacoes = [n['sol'] for n in notas_processadas]
+            
+    # Quadro Visual de Obras Removidas
+    if notas_removidas:
+        st.markdown('<div class="eh-yellow" style="margin-top: 15px; background-color: #fef2f2; color: #991b1b; border-color: #fca5a5;">⚠️ OBRAS CANCELADAS / FINALIZADAS</div>', unsafe_allow_html=True)
+        removidas_str = "<br>".join(notas_removidas)
+        st.markdown(f'<div class="list-box" style="min-height: 50px; color: #dc2626; background-color: #fef2f2;">{removidas_str}</div>', unsafe_allow_html=True)
+
+cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon, status_sap = "", "", "", "", "", "", "", ""
+cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
+obs_extra = ""
+pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
+responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
+obra_relampago_formatada = ""
+
+descricoes_list = []
+nomes_obras_list = []
+
+if solicitacoes and (not df_sisco.empty or not df_notas.empty):
+    solicitacao_principal = solicitacoes[0]
+    resultado_sisco = df_sisco[df_sisco['Nota CCS'] == solicitacao_principal] if not df_sisco.empty else pd.DataFrame()
+    resultado_notas = df_notas[df_notas['PROTOCOLO'] == solicitacao_principal] if not df_notas.empty else pd.DataFrame()
+    
+    if not resultado_sisco.empty or not resultado_notas.empty:
+        r_sisco = resultado_sisco.iloc[0] if not resultado_sisco.empty else None
+        r_notas = resultado_notas.iloc[0] if not resultado_notas.empty else None
+        
+        cc = str(r_sisco.get('CC', '')) if r_sisco is not None else ""
+        if not cc or cc.lower() == 'nan': cc = str(r_notas.get('CONTA CONTRATO', '')) if r_notas is not None else ""
+        cc = cc.replace('.0', '')
+            
+        instalacao = str(r_sisco.get('INSTALACAO', '')) if r_sisco is not None else ""
+        if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
+        instalacao = instalacao.replace('.0', '')
+            
+        fase = str(r_sisco.get('FASE', 'MO')).upper() if r_sisco is not None else "MO"
+        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase:
+            fase = str(r_notas.get('FASE', 'MO')).upper() if r_notas is not None else "MO"
+        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
+            
+        tipo_obra_raw = str(r_notas.get('TIPO NOTA', '')) if r_notas is not None else ""
+        if not tipo_obra_raw or tipo_obra_raw.lower() == 'nan':
+            tipo_obra_raw = str(r_sisco.get('Detalhes', '')) if r_sisco is not None else ""
+            
+        if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
+        parts = tipo_obra_raw.replace("-", " ").strip().split(" ")
+        if len(parts) > 3:
+            tipo_obra_sisco = " ".join(parts[:3])
+        else:
+            tipo_obra_sisco = tipo_obra_raw
+            
+        data_abertura_raw = str(r_notas.get('DATA ABERTURA', '')) if r_notas is not None else ""
+        if not data_abertura_raw or data_abertura_raw.lower() == 'nan':
+            data_abertura_raw = str(r_sisco.get('Data Abertura', '')) if r_sisco is not None else ""
+        if not data_abertura_raw or data_abertura_raw.lower() == 'nan': 
+            data_abertura_raw = str(r_notas.get('DATA DA SOLICITAÇÃO', '')) if r_notas is not None else ""
+        data_abertura = formatar_data(data_abertura_raw)
+            
+        status_sap = str(r_notas.get('STATUS SAP', '')) if r_notas is not None else ""
+        if status_sap.lower() == 'nan': status_sap = ""
+            
+        lat = str(r_sisco.get('Latitude', '')) if r_sisco is not None else ""
+        if not lat or lat.lower() == 'nan': lat = str(r_notas.get('LATITUDE', '')) if r_notas is not None else ""
+        lat = lat.replace('.', ',')
+        
+        lon = str(r_sisco.get('Longitude', '')) if r_sisco is not None else ""
+        if not lon or lon.lower() == 'nan': lon = str(r_notas.get('LONGITUDE', '')) if r_notas is not None else ""
+        lon = lon.replace('.', ',')
+        
+        cidade_raw = str(r_sisco.get('Município', '')) if r_sisco is not None else ""
+        if not cidade_raw or cidade_raw.lower() == 'nan': cidade_raw = str(r_notas.get('MUNICIPIO', '')) if r_notas is not None else ""
+        cidade_auto = remover_acentos(cidade_raw)
+        
+        cliente_auto = str(r_sisco.get('Nome', '')) if r_sisco is not None else ""
+        if not cliente_auto or cliente_auto.lower() == 'nan': cliente_auto = str(r_notas.get('NOME DO SOLICITANTE', r_notas.get('NOME', ''))) if r_notas is not None else ""
+        cliente_auto = cliente_auto.upper()
+            
+        endereco_auto = str(r_notas.get('ENDEREÇO', '')) if r_notas is not None else ""
+        if not endereco_auto or endereco_auto.lower() == 'nan': endereco_auto = str(r_sisco.get('Endereço', '')) if r_sisco is not None else ""
+        
+        pi_auto = str(r_notas.get('TIPO LIGAÇÃO', r_notas.get('TIPO NOTA', ''))) if r_notas is not None else ""
+        if not pi_auto or pi_auto.lower() == 'nan': pi_auto = str(r_sisco.get('Tipo de Projeto(PI)', '')) if r_sisco is not None else ""
+        if pi_auto.lower() == 'nan': pi_auto = ""
+            
+        reg_raw = str(r_notas.get('REGIONAL', '')) if r_notas is not None else ""
+        if not reg_raw or reg_raw.lower() == 'nan': reg_raw = str(r_sisco.get('Regional', '')) if r_sisco is not None else ""
+        reg_raw = reg_raw.upper()
+        
+        obs = str(r_sisco.get('INFORMAÇÕES', '')) if r_sisco is not None else ""
+        if not obs or obs.lower() == 'nan': obs = str(r_notas.get('INFORMAÇÕES', '')) if r_notas is not None else ""
+        if not obs or obs.lower() == 'nan': obs = str(r_sisco.get('Obs(última obs)', '')) if r_sisco is not None else ""
+        if not obs or obs.lower() == 'nan': obs = str(r_notas.get('PONTO DE REFERENCIA', '')) if r_notas is not None else ""
+        if obs.lower() == 'nan': obs = ""
+
+        obs_extra = str(r_sisco.get('INFORMAÇÕES EXTRAS', '')) if r_sisco is not None else ""
+        if not obs_extra or obs_extra.lower() == 'nan': obs_extra = str(r_notas.get('INFORMAÇÕES EXTRAS', '')) if r_notas is not None else ""
+        if obs_extra.lower() == 'nan': obs_extra = ""
+        
+    else:
+        st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
+
+# ==========================================
+# 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
+# ==========================================
+with c2:
+    st.markdown(f"""
+    <div class="eh">🎲 DADOS</div>
+    <table class="et">
+        <tr><td class="lbl">Conta Contrato</td><td class="val">{cc}</td></tr>
+        <tr><td class="lbl">Instalação CCS</td><td class="val">{instalacao}</td></tr>
+        <tr><td class="lbl">Tipo de Obra</td><td class="val">{tipo_obra_sisco}</td></tr>
+        <tr><td class="lbl">Status SAP</td><td class="val">{status_sap}</td></tr>
+        <tr><td class="lbl">Data Abertura</td><td class="val">{data_abertura}</td></tr>
+        <tr><td class="lbl">Fase</td><td class="val">{fase}</td></tr>
+        <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
+        <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
+        <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LAT / LONG</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
+    </table>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
+    
+    def criar_linha_input(label, widget_type, key, options=None):
+        cA, cB = st.columns([1, 2.5], gap="small")
+        with cA:
+            st.markdown(f'<div class="lbl-box">{label}</div>', unsafe_allow_html=True)
+        with cB:
+            if widget_type == "select":
+                return st.selectbox("", options, key=key, label_visibility="collapsed")
+            else:
+                return st.text_input("", key=key, label_visibility="collapsed")
+
+    with st.container():
+        man_especial = criar_linha_input("Obra Especial ?", "select", "i1", ["", "OE-Obras Juridicas e/ou Especiais", "EX-Exceções"])
+        man_tipo_obra = criar_linha_input("Tipo de Obra", "select", "i2", [""] + lista_tipos_obra)
+        man_pi = criar_linha_input("PI", "select", "i3", [""] + lista_pi)
+        man_mun = criar_linha_input("Municipio", "select", "i4", [""] + lista_mun)
+        man_id = criar_linha_input("ID do Numero", "select", "i5", [""] + lista_id)
+        man_sol = criar_linha_input("Solicitação", "text", "i6")
+        man_livre = criar_linha_input("Escrita Livre", "text", "i7")
+        man_endereco = criar_linha_input("Endereço", "text", "i8")
+        man_cc = criar_linha_input("Conta Contrato", "text", "i9")
+
+# ==========================================
+# 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
+# ==========================================
+pi_ativo = man_pi if man_pi else pi_auto
+
+# Repasses Manuais para a Tabela SGO
+if man_mun:
+    cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
+if man_livre:
+    cliente_auto = man_livre.upper()
+if man_endereco:
+    endereco_auto = man_endereco.upper()
+if man_cc:
+    cc = man_cc
+
+if man_mun and not df_dados.empty and 'SIGLA-MUNICIPIO' in df_dados.columns:
+    dados_mun = df_dados[df_dados['SIGLA-MUNICIPIO'] == man_mun]
+    if not dados_mun.empty:
+        reg_raw = str(dados_mun.iloc[0].get('REGIONAL', '')).upper()
+
+regional_formatado = ""
+regional_label = "Regional"
+col_idx = 0
+
+if reg_raw:
+    if "SUL" in reg_raw: 
+        regional_formatado = "CM04-IMPERATRIZ"; col_idx = 14; regional_label = "Regional Sul"
+    elif "CENTRO" in reg_raw: 
+        regional_formatado = "CM03-BACABAL"; col_idx = 19; regional_label = "Regional Centro"
+    elif "LESTE" in reg_raw: 
+        regional_formatado = "CM02-TIMON"; col_idx = 24; regional_label = "Regional Leste"
+    elif "NORTE" in reg_raw: 
+        regional_formatado = "CM01-SAO LUIS"; col_idx = 4; regional_label = "Regional Norte"
+    elif "NOROESTE" in reg_raw: 
+        regional_formatado = "CM01-PINHEIRO"; col_idx = 9; regional_label = "Regional Noroeste"
+
+area_resp = ""
+if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
+    dados_pi = df_dados[df_dados['PI'] == pi_ativo]
+    if not dados_pi.empty:
+        r_dados = dados_pi.iloc[0]
+        
+        area_resp_nova = str(r_dados.get('Tipo', ''))
+        if area_resp_nova.lower() != 'nan' and area_resp_nova != "":
+            area_resp = area_resp_nova.upper()
+            
+        tipo_nota_parceiro = str(r_dados.get('Tipo de NS|Parceiro', ''))
+        responsavel_obra = str(r_dados.get('Resp. Obra', ''))
+        
+        qtd_dias = str(r_dados.get('Qtd dias', '')).replace('.0', '')
+        data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({qtd_dias} DIAS)"
+        
+        if pi_ativo in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"]:
+            total_val = 7000 * (len(solicitacoes) if solicitacoes else 1)
+        else:
+            total_val = 30000 * (len(solicitacoes) if solicitacoes else 1)
+        valor_previsto = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        
+        if col_idx > 0:
+            gerente = str(dados_pi.iloc[0, col_idx])
+            executivo = str(dados_pi.iloc[0, col_idx + 1])
+            empresa = str(dados_pi.iloc[0, col_idx + 2])
+            contrato = str(dados_pi.iloc[0, col_idx + 3]).replace('.0', '')
+            tecnico = str(dados_pi.iloc[0, col_idx + 4])
+            
+            if gerente.lower() == 'nan': gerente = ""
+            if executivo.lower() == 'nan': executivo = ""
+            if empresa.lower() == 'nan': empresa = ""
+            if contrato.lower() == 'nan': contrato = ""
+            if tecnico.lower() == 'nan': tecnico = ""
+
+if not area_resp: area_resp = ""
+
+# ==========================================
+# 5. GERADOR EM MASSA DOS NOMES E DESCRIÇÕES
+# ==========================================
+pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
+pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
+pref_pi = pi_ativo if pi_ativo else "UNR"
+pref_id = man_id.split('-')[0] if man_id else "NS"
+
+if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol or man_livre or man_endereco or man_cc):
+    pref_mun = man_mun.split('-')[0] if man_mun else "XXX"
+    val_sol_final = man_sol if man_sol else "0000000000"
+    val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else "NOME"
+    val_livre_final_desc = man_livre.upper() if man_livre else "NOME"
+    val_cc_final = man_cc if man_cc else "0000000000"
+    
+    raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
+    clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
+    obra_relampago_formatada = clean_name[:34].upper()
+    
+    fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT"] else f"(FASE {fase})"
+    desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
+    
+    descricoes_list.append(desc_str)
+    nomes_obras_list.append(obra_relampago_formatada)
+else:
+    for idx, sol in enumerate(solicitacoes):
+        res_sol_sisco = df_sisco[df_sisco['Nota CCS'] == sol] if not df_sisco.empty else pd.DataFrame()
+        res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
+        
+        if not res_sol_sisco.empty or not res_sol_notas.empty:
+            r_sol_sisco = res_sol_sisco.iloc[0] if not res_sol_sisco.empty else None
+            r_sol_notas = res_sol_notas.iloc[0] if not res_sol_notas.empty else None
+            
+            cc_sol = str(r_sol_sisco.get('CC', '')) if r_sol_sisco is not None else ""
+            if not cc_sol or cc_sol.lower() == 'nan': cc_sol = str(r_sol_notas.get('CONTA CONTRATO', '')) if r_sol_notas is not None else ""
+            cc_sol = cc_sol.replace('.0', '')
+            
+            cli_sol = str(r_sol_sisco.get('Nome', '')) if r_sol_sisco is not None else ""
+            if not cli_sol or cli_sol.lower() == 'nan': 
+                cli_sol = str(r_sol_notas.get('NOME DO SOLICITANTE', r_sol_notas.get('NOME', ''))) if r_sol_notas is not None else ""
+            cli_sol = cli_sol.upper()
+            
+            cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
+            if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
+            
+            fase_sol = str(r_sol_sisco.get('FASE', 'MO')).upper() if r_sol_sisco is not None else "MO"
+            if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol:
+                fase_sol = str(r_sol_notas.get('FASE', 'MO')).upper() if r_sol_notas is not None else "MO"
+            if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol: fase_sol = "MO"
+            
+            tipo_obra_raw_loop = str(r_sol_notas.get('TIPO NOTA', '')) if r_sol_notas is not None else ""
+            if not tipo_obra_raw_loop or tipo_obra_raw_loop.lower() == 'nan':
+                tipo_obra_raw_loop = str(r_sol_sisco.get('Detalhes', '')) if r_sol_sisco is not None else ""
                 
-            lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
-            protocolo = str(row.get('PROTOCOLO', 'S/N'))
-            status_list = str(row.get('STATUS LIST', 'S/N'))
-            
-            cor_ponto = 'red'
-            titulo = "🚨 CONFLITO DETECTADO"
-            info_extra = f"<tr><td style='color: red; padding: 2px;'><b>CONFLITO COM:</b></td><td style='color: red;'>{html.escape(row['PROTOCOLO_CONFLITO'])} ({row['DISTANCIA_CONFLITO']:.1f}m)</td></tr>"
-            
-            dados_tabela_conflito.append({
-                "Protocolo (Nova)": protocolo,
-                "Status (Nova)": status_list,
-                "Conflito (Alvo Concluída)": row['PROTOCOLO_CONFLITO'],
-                "Distância do Centro (m)": f"{row['DISTANCIA_CONFLITO']:.1f}m",
-                "Latitude": lat,
-                "Longitude": lon
-            })
-                
-            html_popup = f"""
-            <div style="min-width: 250px; font-family: sans-serif;">
-                <h4 style="margin-top: 0; color: {cor_ponto}; border-bottom: 2px solid {cor_ponto}; padding-bottom: 5px;">{titulo}</h4>
-                <table style="width:100%;">
-                    <tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(protocolo)}</td></tr>
-                    <tr><td style="color: #555; padding: 2px;"><b>STATUS:</b></td><td>{html.escape(status_list)}</td></tr>
-                    {info_extra}
-                </table>
-            </div>
-            """
-            
-            folium.CircleMarker(
-                location=[lat, lon], 
-                radius=6, 
-                color='black', 
-                weight=1, 
-                fill=True, 
-                fillColor=cor_ponto, 
-                fillOpacity=0.9,
-                tooltip=f"{titulo}: {html.escape(protocolo)}", 
-                popup=folium.Popup(html_popup, max_width=300)
-            ).add_to(fg_andamento)
-            
-        fg_andamento.add_to(mapa)
+            if tipo_obra_raw_loop.lower() == 'nan': tipo_obra_raw_loop = ""
+            parts_to = tipo_obra_raw_loop.replace("-", " ").strip().split(" ")
+            if len(parts_to) > 3:
+                tipo_obra_sisco_loop = " ".join(parts_to[:3])
+            else:
+                tipo_obra_sisco_loop = tipo_obra_raw_loop
 
-folium.LayerControl(position='topright').add_to(mapa)
-
-# -------------------------------------------------------------
-# 4. CAPTURANDO CLIQUE NA TABELA
-# -------------------------------------------------------------
-zoom_lat, zoom_lon = None, None
-
-with table_container:
-    if mostrar_conflitantes and msg_obras == "OK" and len(dados_tabela_conflito) > 0:
-        st.markdown("---")
-        st.markdown(f"<h3 style='color: #d62728;'>🚨 Relatório de Obras Sobrepostas (Total: {len(dados_tabela_conflito)})</h3>", unsafe_allow_html=True)
-        st.markdown("As obras abaixo estão em andamento ou correção, mas a coordenada registrada encontra-se dentro do **raio de 100 metros** de uma obra já dada como concluída no SISCO.<br>💡 **DICA INTERATIVA:** Clique em qualquer linha da tabela abaixo para que o mapa foque e dê zoom exato na obra!", unsafe_allow_html=True)
+            cid_sol_limpo = remover_acentos(cid_sol)
+            pref_mun = man_mun.split('-')[0] if man_mun else map_mun.get(cid_sol_limpo, cid_sol_limpo[:3] if cid_sol_limpo else "XXX")
+            pref_tipo_loop = man_tipo_obra.split('-')[0] if man_tipo_obra else map_tipo_obra.get(remover_acentos(tipo_obra_sisco_loop), "CT")
+            
+            val_sol_final = man_sol if man_sol else sol
+            
+            val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else cli_sol.replace(" ", "-")[:15]
+            val_livre_final_desc = man_livre.upper() if man_livre else cli_sol
+            
+            val_cc_final = man_cc if man_cc else cc_sol
+            
+            fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase_sol.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase_sol.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase_sol.upper() in ["BI", "BT"] else f"(FASE {fase_sol})"
+            desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
+            
+            raw_name = f"{pref_especial}{pref_tipo_loop}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
+            clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
+            nome_str = clean_name[:34].upper()
+            
+            if idx == 0:
+                obra_relampago_formatada = nome_str
+        else:
+            desc_str = f"{sol} - NÃO ENCONTRADO"
+            nome_str = f"{sol} - NÃO ENCONTRADO"
+            if idx == 0:
+                obra_relampago_formatada = nome_str
+            
+        descricoes_list.append(desc_str)
         
-        df_tabela = pd.DataFrame(dados_tabela_conflito)
-        
-        try:
-            event = st.dataframe(
-                df_tabela, 
-                use_container_width=True, 
-                on_select="rerun", 
-                selection_mode="single_row"
-            )
-            if hasattr(event, 'selection') and event.selection.rows:
-                idx = event.selection.rows[0]
-                zoom_lat = float(df_tabela.iloc[idx]['Latitude'])
-                zoom_lon = float(df_tabela.iloc[idx]['Longitude'])
-        except Exception:
-            st.dataframe(df_tabela, use_container_width=True)
-            escolha = st.selectbox("📌 O seu sistema Streamlit está desatualizado. Use esta caixa para selecionar a obra e dar zoom:", ["Nenhum"] + df_tabela['Protocolo (Nova)'].astype(str).tolist())
-            if escolha != "Nenhum":
-                linha = df_tabela[df_tabela['Protocolo (Nova)'].astype(str) == escolha].iloc[0]
-                zoom_lat = float(linha['Latitude'])
-                zoom_lon = float(linha['Longitude'])
+        if notas_associadas and idx > 0:
+            pass 
+        else:
+            nomes_obras_list.append(nome_str)
 
-# -------------------------------------------------------------
-# 5. GERENCIAMENTO DE ZOOM E RENDERIZAÇÃO FINAL
-# -------------------------------------------------------------
-if zoom_lat is not None and zoom_lon is not None:
-    mapa.fit_bounds([[zoom_lat - 0.001, zoom_lon - 0.001], [zoom_lat + 0.001, zoom_lon + 0.001]])
-elif busca_lat is not None and busca_lon is not None:
-    mapa.fit_bounds([[busca_lat - 0.001, busca_lon - 0.001], [busca_lat + 0.001, busca_lon + 0.001]])
-elif busca_lats and busca_lons: 
-    mapa.fit_bounds([[min(busca_lats), min(busca_lons)], [max(busca_lats), max(busca_lons)]])
-elif municipios_sel and geo_data_ibge:
-    mun_foco_lats, mun_foco_lons = [], []
-    for feature in geo_data_ibge['features']:
-        if feature['properties'].get('MUNICIPIO') in municipios_sel:
-            geom = feature['geometry']
-            if geom['type'] == 'Polygon':
-                for pt in geom['coordinates'][0]: mun_foco_lats.append(pt[1]); mun_foco_lons.append(pt[0])
-            elif geom['type'] == 'MultiPolygon':
-                for poly in geom['coordinates']:
-                    for pt in poly[0]: mun_foco_lats.append(pt[1]); mun_foco_lons.append(pt[0])
-    if mun_foco_lats and mun_foco_lons: mapa.fit_bounds([[min(mun_foco_lats), min(mun_foco_lons)], [max(mun_foco_lats), max(mun_foco_lons)]])
-    elif todas_lats and todas_lons: mapa.fit_bounds([[min(todas_lats), min(todas_lons)], [max(todas_lats), max(todas_lons)]])
-elif todas_lats and todas_lons: 
-    mapa.fit_bounds([[min(todas_lats), min(todas_lons)], [max(todas_lats), max(todas_lons)]])
+# ==========================================
+# 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
+# ==========================================
+with c3:
+    lbl_obra_estilo = 'class="lbl"' if not (man_tipo_obra or man_pi or man_livre or man_especial) else 'class="lbl text-red" style="background-color: #fef08a;"'
+    val_obra_estilo = 'class="val text-green"' if not (man_tipo_obra or man_pi or man_livre or man_especial) else 'class="val text-red" style="background-color: #fef08a; font-style: italic;"'
+    lbl_obra_texto = "⚡ Obra Relampago ⚡" if not (man_tipo_obra or man_pi or man_livre or man_especial) else "🚧 Nome da Obra 🚧"
+    
+    st.markdown(f"""
+    <div class="eh">📝 CRIAÇÃO DA NOTA SGO 📝</div>
+    <table class="et">
+        <tr><td class="lbl">Tipo Nota | Parceiro</td><td class="val text-red" style="font-size: 11px;">{tipo_nota_parceiro}</td></tr>
+        <tr><td {lbl_obra_estilo} style="font-size: 11px;">{lbl_obra_texto}</td><td {val_obra_estilo}>{obra_relampago_formatada}</td></tr>
+        <tr><td class="lbl">{regional_label}</td><td class="val">{regional_formatado}</td></tr>
+        <tr><td class="lbl">Cidade</td><td class="val">{cidade_auto}</td></tr>
+        <tr><td class="lbl">Área Responsável</td><td class="val">{area_resp}</td></tr>
+        <tr><td class="lbl">Cliente</td><td class="val">{cliente_auto}</td></tr>
+        <tr><td class="lbl">Endereço</td><td class="val">{endereco_auto}</td></tr>
+        <tr><td class="lbl">PI</td><td class="val text-blue" style="font-style: italic;">{pi_ativo}</td></tr>
+        <tr><td class="lbl">Gerente</td><td class="val">{gerente}</td></tr>
+        <tr><td class="lbl">Executivo</td><td class="val">{executivo}</td></tr>
+        <tr><td class="lbl">Responsável Obra</td><td class="val text-blue" style="font-size: 11px;">{responsavel_obra}</td></tr>
+        <tr><td class="lbl">Valor Previsto</td><td class="val text-green">{valor_previsto}</td></tr>
+    </table>
+    
+    <div class="eh">👍 APROVAÇÃO DA NOTA SGO</div>
+    <table class="et">
+        <tr><td class="lbl">Empresa</td><td class="val">{empresa}</td></tr>
+        <tr><td class="lbl">Contrato</td><td class="val">{contrato}</td></tr>
+        <tr><td class="lbl">Técnico</td><td class="val">{tecnico}</td></tr>
+        <tr><td class="lbl">Data</td><td class="val">{data_aprov}</td></tr>
+    </table>
+    
+    <div class="eh-dark" style="text-align: left; padding-left: 10px;">"" MAIS OBSERVAÇÕES ABAIXO...</div>
+    <div class="obs-box" style="margin-bottom: 15px;">{obs}</div>
 
-with map_container:
-    st_folium(mapa, use_container_width=True, height=850, returned_objects=[])
+    <div class="eh-dark" style="text-align: left; padding-left: 10px;">"" MAIS OBSERVAÇÕES ABAIXO...</div>
+    <div class="obs-box">{obs_extra}</div>
+    """, unsafe_allow_html=True)
+
+with c4:
+    st.markdown('<div class="eh">🖋 DESCRIÇÕES SGO 🖋</div>', unsafe_allow_html=True)
+    descricoes_html_final = "<br>".join(descricoes_list) if descricoes_list else ""
+    st.markdown(f'<div class="list-box">{descricoes_html_final}</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="eh" style="margin-top: 15px;">🚧 NOMES DAS OBRAS 🚧</div>', unsafe_allow_html=True)
+    nomes_html_final = "<br>".join(nomes_obras_list) if nomes_obras_list else ""
+    st.markdown(f'<div class="list-box">{nomes_html_final}</div>', unsafe_allow_html=True)
