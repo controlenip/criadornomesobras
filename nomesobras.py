@@ -71,13 +71,19 @@ def formatar_data(data_raw):
     except:
         return str(data_raw)[:10]
 
-# Nova função blindada para buscar colunas ignorando espaços e acentos no Excel
+# ==========================================
+# FUNÇÃO BLINDADA EXTREMA (Correção do erro do Excel)
+# ==========================================
 def buscar_info(row, colunas_alvo):
     if row is None or row.empty: return ""
     for col in row.index:
-        col_limpa = remover_acentos(str(col)).upper().strip()
+        # Remove espaços, quebras de linha e tudo que não for letra/número
+        col_limpa = re.sub(r'[^A-Z0-9]', '', remover_acentos(str(col)).upper())
+        # Remove números no final gerados automaticamente pelo pandas (ex: INFORMACOES1)
+        col_limpa = re.sub(r'\d+$', '', col_limpa) 
+        
         for alvo in colunas_alvo:
-            alvo_limpo = remover_acentos(alvo).upper().strip()
+            alvo_limpo = re.sub(r'[^A-Z0-9]', '', remover_acentos(alvo).upper())
             if col_limpa == alvo_limpo:
                 val = str(row[col]).strip()
                 if val and val.lower() not in ['nan', 'none', 'null', '']:
@@ -91,7 +97,7 @@ def carregar_dados(file):
     try:
         df_sisco = pd.read_excel(xls, sheet_name='Sisco')
         if 'Nota CCS' in df_sisco.columns:
-            df_sisco['Nota CCS'] = df_sisco['Nota CCS'].astype(str).str.replace('.0', '', regex=False)
+            df_sisco['Nota CCS'] = df_sisco['Nota CCS'].astype(str).str.replace('.0', '', regex=False).str.strip()
     except:
         df_sisco = pd.DataFrame()
         
@@ -102,7 +108,7 @@ def carregar_dados(file):
         except: df_notas = pd.DataFrame()
         
     if not df_notas.empty and 'PROTOCOLO' in df_notas.columns:
-        df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).str.replace('.0', '', regex=False)
+        df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).str.replace('.0', '', regex=False).str.strip()
         
     try: 
         df_dados = pd.read_excel(xls, sheet_name='DADOS', header=1)
@@ -350,14 +356,14 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not reg_raw or reg_raw.lower() == 'nan': reg_raw = str(r_sisco.get('Regional', '')) if r_sisco is not None else ""
         reg_raw = reg_raw.upper()
         
-        # Puxando informações específicas com a Função Blindada (Ignora falhas de espaço e acento na planilha)
+        # Puxando informações específicas com a Função Blindada
         obs = buscar_info(r_notas, ['INFORMACOES'])
         if not obs: obs = buscar_info(r_sisco, ['INFORMACOES'])
-        if not obs: obs = buscar_info(r_notas, ['PONTO DE REFERENCIA'])
-        if not obs: obs = buscar_info(r_sisco, ['OBS(ULTIMA OBS)'])
+        if not obs: obs = buscar_info(r_notas, ['PONTODEREFERENCIA'])
+        if not obs: obs = buscar_info(r_sisco, ['OBSULTIMAOBS'])
 
-        obs_extra = buscar_info(r_notas, ['INFORMACOES EXTRAS'])
-        if not obs_extra: obs_extra = buscar_info(r_sisco, ['INFORMACOES EXTRAS'])
+        obs_extra = buscar_info(r_notas, ['INFORMACOESEXTRAS'])
+        if not obs_extra: obs_extra = buscar_info(r_sisco, ['INFORMACOESEXTRAS'])
         
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
