@@ -71,6 +71,19 @@ def formatar_data(data_raw):
     except:
         return str(data_raw)[:10]
 
+# Nova função blindada para buscar colunas ignorando espaços e acentos no Excel
+def buscar_info(row, colunas_alvo):
+    if row is None or row.empty: return ""
+    for col in row.index:
+        col_limpa = remover_acentos(str(col)).upper().strip()
+        for alvo in colunas_alvo:
+            alvo_limpo = remover_acentos(alvo).upper().strip()
+            if col_limpa == alvo_limpo:
+                val = str(row[col]).strip()
+                if val and val.lower() not in ['nan', 'none', 'null', '']:
+                    return val
+    return ""
+
 @st.cache_data(show_spinner=False)
 def carregar_dados(file):
     xls = pd.ExcelFile(file)
@@ -337,32 +350,14 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not reg_raw or reg_raw.lower() == 'nan': reg_raw = str(r_sisco.get('Regional', '')) if r_sisco is not None else ""
         reg_raw = reg_raw.upper()
         
-        # Puxando informações específicas com fallback seguro e prioridade
-        obs = ""
-        if r_notas is not None:
-            val = str(r_notas.get('INFORMAÇÕES', '')).strip()
-            if val and val.lower() not in ['nan', 'none', 'null', '']: obs = val
-            
-        if not obs and r_sisco is not None:
-            val = str(r_sisco.get('INFORMAÇÕES', '')).strip()
-            if val and val.lower() not in ['nan', 'none', 'null', '']: obs = val
-            
-        if not obs and r_notas is not None:
-            val = str(r_notas.get('PONTO DE REFERENCIA', '')).strip()
-            if val and val.lower() not in ['nan', 'none', 'null', '']: obs = val
-            
-        if not obs and r_sisco is not None:
-            val = str(r_sisco.get('Obs(última obs)', '')).strip()
-            if val and val.lower() not in ['nan', 'none', 'null', '']: obs = val
+        # Puxando informações específicas com a Função Blindada (Ignora falhas de espaço e acento na planilha)
+        obs = buscar_info(r_notas, ['INFORMACOES'])
+        if not obs: obs = buscar_info(r_sisco, ['INFORMACOES'])
+        if not obs: obs = buscar_info(r_notas, ['PONTO DE REFERENCIA'])
+        if not obs: obs = buscar_info(r_sisco, ['OBS(ULTIMA OBS)'])
 
-        obs_extra = ""
-        if r_notas is not None:
-            val = str(r_notas.get('INFORMAÇÕES EXTRAS', '')).strip()
-            if val and val.lower() not in ['nan', 'none', 'null', '']: obs_extra = val
-            
-        if not obs_extra and r_sisco is not None:
-            val = str(r_sisco.get('INFORMAÇÕES EXTRAS', '')).strip()
-            if val and val.lower() not in ['nan', 'none', 'null', '']: obs_extra = val
+        obs_extra = buscar_info(r_notas, ['INFORMACOES EXTRAS'])
+        if not obs_extra: obs_extra = buscar_info(r_sisco, ['INFORMACOES EXTRAS'])
         
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
