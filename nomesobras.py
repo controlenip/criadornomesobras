@@ -9,7 +9,7 @@ import random
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS (VISUAL MODERNO E PROFISSIONAL)
 # ==========================================
-st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -40,7 +40,7 @@ st.markdown("""
     .stSelectbox, .stTextInput { margin-bottom: -10px !important; }
     .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
     
-    /* Regra para o botão de limpar ficar compacto e com o ícone visível */
+    /* Regra para destacar o botão primário com tamanho reduzido */
     button[kind="primary"] p {
         font-size: 12px !important;
         font-weight: 700 !important;
@@ -337,14 +337,23 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not reg_raw or reg_raw.lower() == 'nan': reg_raw = str(r_sisco.get('Regional', '')) if r_sisco is not None else ""
         reg_raw = reg_raw.upper()
         
-        obs = str(r_sisco.get('INFORMAÇÕES', '')) if r_sisco is not None else ""
-        if not obs or obs.lower() == 'nan': obs = str(r_notas.get('INFORMAÇÕES', '')) if r_notas is not None else ""
-        if not obs or obs.lower() == 'nan': obs = str(r_sisco.get('Obs(última obs)', '')) if r_sisco is not None else ""
-        if not obs or obs.lower() == 'nan': obs = str(r_notas.get('PONTO DE REFERENCIA', '')) if r_notas is not None else ""
+        # Puxando informações específicas para as caixas de observação (priorizando aba NOTAS)
+        obs = ""
+        if r_notas is not None:
+            obs = str(r_notas.get('INFORMAÇÕES', ''))
+            if not obs or obs.lower() == 'nan':
+                obs = str(r_notas.get('PONTO DE REFERENCIA', ''))
+        if (not obs or obs.lower() == 'nan') and r_sisco is not None:
+            obs = str(r_sisco.get('INFORMAÇÕES', ''))
+            if not obs or obs.lower() == 'nan':
+                obs = str(r_sisco.get('Obs(última obs)', ''))
         if obs.lower() == 'nan': obs = ""
 
-        obs_extra = str(r_sisco.get('INFORMAÇÕES EXTRAS', '')) if r_sisco is not None else ""
-        if not obs_extra or obs_extra.lower() == 'nan': obs_extra = str(r_notas.get('INFORMAÇÕES EXTRAS', '')) if r_notas is not None else ""
+        obs_extra = ""
+        if r_notas is not None:
+            obs_extra = str(r_notas.get('INFORMAÇÕES EXTRAS', ''))
+        if (not obs_extra or obs_extra.lower() == 'nan') and r_sisco is not None:
+            obs_extra = str(r_sisco.get('INFORMAÇÕES EXTRAS', ''))
         if obs_extra.lower() == 'nan': obs_extra = ""
         
     else:
@@ -605,10 +614,10 @@ with c3:
         <tr><td class="lbl">Data</td><td class="val">{data_aprov}</td></tr>
     </table>
     
-    <div class="eh-dark" style="text-align: left; padding-left: 10px;">"" MAIS OBSERVAÇÕES ABAIXO...</div>
+    <div class="eh-dark" style="text-align: left; padding-left: 10px;">INFORMAÇÕES</div>
     <div class="obs-box" style="margin-bottom: 15px;">{obs}</div>
 
-    <div class="eh-dark" style="text-align: left; padding-left: 10px;">"" MAIS OBSERVAÇÕES ABAIXO...</div>
+    <div class="eh-dark" style="text-align: left; padding-left: 10px;">INFORMAÇÕES EXTRAS</div>
     <div class="obs-box">{obs_extra}</div>
     """, unsafe_allow_html=True)
 
