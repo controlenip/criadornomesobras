@@ -41,10 +41,10 @@ st.markdown("""
     .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
     
     /* Regra para o botão de limpar ficar compacto e com o ícone visível */
-    button[kind="secondary"] p {
+    button[kind="primary"] p {
         font-size: 12px !important;
         font-weight: 700 !important;
-        color: #334155 !important;
+        color: #ffffff !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -117,7 +117,7 @@ if os.path.exists("LOGO_NIP.png"):
 # Colunas ajustadas para reduzir o botão e mantê-lo centralizado
 col_btn1, col_btn2, col_btn3 = st.columns([3.5, 1.5, 3.5])
 with col_btn2:
-    st.button("🧹 LIMPAR CAMPOS", on_click=limpar_campos_manuais, use_container_width=True)
+    st.button("🧹 LIMPAR CAMPOS", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -189,7 +189,7 @@ with c1:
             if not df_sisco.empty:
                 r_s = df_sisco[df_sisco['Nota CCS'] == sol]
                 if not r_s.empty:
-                    if not fase_sol:  # Só substitui se não tiver achado na NOTAS
+                    if not fase_sol:
                         f_temp = str(r_s.iloc[0].get('FASE', '')).upper()
                         if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
                             fase_sol = f_temp
@@ -253,7 +253,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
-        # Puxa Fase da aba NOTAS primeiro
         fase = ""
         if r_notas is not None:
             f_temp = str(r_notas.get('FASE', '')).upper()
@@ -286,7 +285,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         status_sap = str(r_notas.get('STATUS SAP', '')) if r_notas is not None else ""
         if status_sap.lower() == 'nan': status_sap = ""
             
-        # Não substitui ponto por vírgula para manter as coordenadas originais
         lat = str(r_sisco.get('Latitude', '')) if r_sisco is not None else ""
         if not lat or lat.lower() == 'nan': lat = str(r_notas.get('LATITUDE', '')) if r_notas is not None else ""
         
@@ -418,7 +416,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         
         qtd_dias = str(r_dados.get('Qtd dias', '')).replace('.0', '')
         
-        # Formatação inteligente da data de aprovação
         data_aprov_raw = str(r_dados.get('Data final', ''))
         data_aprov_formatada = formatar_data(data_aprov_raw)
         data_aprov = f"{data_aprov_formatada} ({qtd_dias} DIAS)" if data_aprov_formatada else ""
@@ -463,7 +460,7 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
     obra_relampago_formatada = clean_name[:34].upper()
     
-    fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT"] else f"(FASE {fase})"
+    fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT", "B"] else f"(FASE {fase})"
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
     
     descricoes_list.append(desc_str)
@@ -522,7 +519,7 @@ else:
             
             val_cc_final = man_cc if man_cc else cc_sol
             
-            fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase_sol.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase_sol.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase_sol.upper() in ["BI", "BT"] else f"(FASE {fase_sol})"
+            fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase_sol.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase_sol.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase_sol.upper() in ["BI", "BT", "B"] else f"(FASE {fase_sol})"
             desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
             
             raw_name = f"{pref_especial}{pref_tipo_loop}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
