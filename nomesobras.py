@@ -171,29 +171,34 @@ with c1:
         
         notas_processadas = []
         for sol in parts:
-            fase_sol = "MO"
+            fase_sol = ""
             pi_sol = ""
             status_sap_temp = ""
             
-            if not df_sisco.empty:
-                r_s = df_sisco[df_sisco['Nota CCS'] == sol]
-                if not r_s.empty:
-                    f_temp = str(r_s.iloc[0].get('FASE', 'MO')).upper()
-                    if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
-                        fase_sol = f_temp
-                    pi_sol = str(r_s.iloc[0].get('Tipo de Projeto(PI)', ''))
-            
+            # Extração prioritária da aba NOTAS para Fase e Status SAP
             if not df_notas.empty:
                 r_n = df_notas[df_notas['PROTOCOLO'] == sol]
                 if not r_n.empty:
-                    f_temp = str(r_n.iloc[0].get('FASE', 'MO')).upper()
-                    if fase_sol == "MO" and f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                    f_temp = str(r_n.iloc[0].get('FASE', '')).upper()
+                    if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
                         fase_sol = f_temp
-                    if not pi_sol or pi_sol.lower() == 'nan':
-                        pi_sol = str(r_n.iloc[0].get('TIPO LIGAÇÃO', r_n.iloc[0].get('TIPO NOTA', '')))
+                    pi_sol = str(r_n.iloc[0].get('TIPO LIGAÇÃO', r_n.iloc[0].get('TIPO NOTA', '')))
                     status_sap_temp = str(r_n.iloc[0].get('STATUS SAP', '')).strip().upper()
             
-            # Filtro Inteligente: Separa CANC e FINL
+            # Fallback na aba Sisco se não achar na NOTAS
+            if not df_sisco.empty:
+                r_s = df_sisco[df_sisco['Nota CCS'] == sol]
+                if not r_s.empty:
+                    if not fase_sol:  # Só substitui se não tiver achado na NOTAS
+                        f_temp = str(r_s.iloc[0].get('FASE', '')).upper()
+                        if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                            fase_sol = f_temp
+                    if not pi_sol or pi_sol.lower() == 'nan':
+                        pi_sol = str(r_s.iloc[0].get('Tipo de Projeto(PI)', ''))
+
+            # Se depois de verificar nas duas planilhas a fase for nula, assume MO
+            if not fase_sol: fase_sol = "MO"
+            
             if status_sap_temp in ['CANC', 'FINL']:
                 notas_removidas.append(f"❌ {sol} ({status_sap_temp})")
             else:
@@ -216,7 +221,6 @@ with c1:
         else:
             solicitacoes = [n['sol'] for n in notas_processadas]
             
-    # Quadro Visual de Obras Removidas
     if notas_removidas:
         st.markdown('<div class="eh-yellow" style="margin-top: 15px; background-color: #fef2f2; color: #991b1b; border-color: #fca5a5;">⚠️ OBRAS CANCELADAS / FINALIZADAS</div>', unsafe_allow_html=True)
         removidas_str = "<br>".join(notas_removidas)
@@ -249,10 +253,17 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         if not instalacao or instalacao.lower() == 'nan': instalacao = str(r_notas.get('INSTALAÇÃO', '')) if r_notas is not None else ""
         instalacao = instalacao.replace('.0', '')
             
-        fase = str(r_sisco.get('FASE', 'MO')).upper() if r_sisco is not None else "MO"
-        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase:
-            fase = str(r_notas.get('FASE', 'MO')).upper() if r_notas is not None else "MO"
-        if fase.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase or 'NAO ESPECIFICADO' in fase: fase = "MO"
+        # Puxa Fase da aba NOTAS primeiro
+        fase = ""
+        if r_notas is not None:
+            f_temp = str(r_notas.get('FASE', '')).upper()
+            if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                fase = f_temp
+        if not fase and r_sisco is not None:
+            f_temp = str(r_sisco.get('FASE', '')).upper()
+            if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                fase = f_temp
+        if not fase: fase = "MO"
             
         tipo_obra_raw = str(r_notas.get('TIPO NOTA', '')) if r_notas is not None else ""
         if not tipo_obra_raw or tipo_obra_raw.lower() == 'nan':
@@ -275,13 +286,12 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         status_sap = str(r_notas.get('STATUS SAP', '')) if r_notas is not None else ""
         if status_sap.lower() == 'nan': status_sap = ""
             
+        # Não substitui ponto por vírgula para manter as coordenadas originais
         lat = str(r_sisco.get('Latitude', '')) if r_sisco is not None else ""
         if not lat or lat.lower() == 'nan': lat = str(r_notas.get('LATITUDE', '')) if r_notas is not None else ""
-        lat = lat.replace('.', ',')
         
         lon = str(r_sisco.get('Longitude', '')) if r_sisco is not None else ""
         if not lon or lon.lower() == 'nan': lon = str(r_notas.get('LONGITUDE', '')) if r_notas is not None else ""
-        lon = lon.replace('.', ',')
         
         cidade_raw = str(r_sisco.get('Município', '')) if r_sisco is not None else ""
         if not cidade_raw or cidade_raw.lower() == 'nan': cidade_raw = str(r_notas.get('MUNICIPIO', '')) if r_notas is not None else ""
@@ -407,7 +417,11 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         responsavel_obra = str(r_dados.get('Resp. Obra', ''))
         
         qtd_dias = str(r_dados.get('Qtd dias', '')).replace('.0', '')
-        data_aprov = f"{str(r_dados.get('Data final', ''))[:10]} ({qtd_dias} DIAS)"
+        
+        # Formatação inteligente da data de aprovação
+        data_aprov_raw = str(r_dados.get('Data final', ''))
+        data_aprov_formatada = formatar_data(data_aprov_raw)
+        data_aprov = f"{data_aprov_formatada} ({qtd_dias} DIAS)" if data_aprov_formatada else ""
         
         if pi_ativo in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"]:
             total_val = 7000 * (len(solicitacoes) if solicitacoes else 1)
@@ -475,10 +489,16 @@ else:
             cid_sol = str(r_sol_sisco.get('Município', '')) if r_sol_sisco is not None else ""
             if not cid_sol or cid_sol.lower() == 'nan': cid_sol = str(r_sol_notas.get('MUNICIPIO', '')) if r_sol_notas is not None else ""
             
-            fase_sol = str(r_sol_sisco.get('FASE', 'MO')).upper() if r_sol_sisco is not None else "MO"
-            if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol:
-                fase_sol = str(r_sol_notas.get('FASE', 'MO')).upper() if r_sol_notas is not None else "MO"
-            if fase_sol.lower() == 'nan' or 'NÃO ESPECIFICADO' in fase_sol or 'NAO ESPECIFICADO' in fase_sol: fase_sol = "MO"
+            fase_sol = ""
+            if r_sol_notas is not None:
+                f_temp = str(r_sol_notas.get('FASE', '')).upper()
+                if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                    fase_sol = f_temp
+            if not fase_sol and r_sol_sisco is not None:
+                f_temp = str(r_sol_sisco.get('FASE', '')).upper()
+                if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
+                    fase_sol = f_temp
+            if not fase_sol: fase_sol = "MO"
             
             tipo_obra_raw_loop = str(r_sol_notas.get('TIPO NOTA', '')) if r_sol_notas is not None else ""
             if not tipo_obra_raw_loop or tipo_obra_raw_loop.lower() == 'nan':
