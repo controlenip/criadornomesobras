@@ -114,7 +114,6 @@ if os.path.exists("LOGO_NIP.png"):
         </div>
     ''', unsafe_allow_html=True)
 
-# Colunas ajustadas para reduzir o botão e mantê-lo centralizado
 col_btn1, col_btn2, col_btn3 = st.columns([3.5, 1.5, 3.5])
 with col_btn2:
     st.button("🧹 LIMPAR CAMPOS", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
@@ -175,7 +174,6 @@ with c1:
             pi_sol = ""
             status_sap_temp = ""
             
-            # Extração prioritária da aba NOTAS para Fase e Status SAP
             if not df_notas.empty:
                 r_n = df_notas[df_notas['PROTOCOLO'] == sol]
                 if not r_n.empty:
@@ -185,7 +183,6 @@ with c1:
                     pi_sol = str(r_n.iloc[0].get('TIPO LIGAÇÃO', r_n.iloc[0].get('TIPO NOTA', '')))
                     status_sap_temp = str(r_n.iloc[0].get('STATUS SAP', '')).strip().upper()
             
-            # Fallback na aba Sisco se não achar na NOTAS
             if not df_sisco.empty:
                 r_s = df_sisco[df_sisco['Nota CCS'] == sol]
                 if not r_s.empty:
@@ -196,7 +193,6 @@ with c1:
                     if not pi_sol or pi_sol.lower() == 'nan':
                         pi_sol = str(r_s.iloc[0].get('Tipo de Projeto(PI)', ''))
 
-            # Se depois de verificar nas duas planilhas a fase for nula, assume MO
             if not fase_sol: fase_sol = "MO"
             
             if status_sap_temp in ['CANC', 'FINL']:
@@ -227,7 +223,7 @@ with c1:
         st.markdown(f'<div class="list-box" style="min-height: 50px; color: #dc2626; background-color: #fef2f2;">{removidas_str}</div>', unsafe_allow_html=True)
 
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon, status_sap = "", "", "", "", "", "", "", ""
-cidade_auto, cliente_auto, endereco_auto, area_resp, reg_raw, obs = "", "", "", "", "", ""
+cidade_auto, cliente_auto, endereco_auto, localidade_auto, area_resp, reg_raw, obs = "", "", "", "", "", "", ""
 obs_extra = ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
@@ -302,6 +298,11 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
         endereco_auto = str(r_notas.get('ENDEREÇO', '')) if r_notas is not None else ""
         if not endereco_auto or endereco_auto.lower() == 'nan': endereco_auto = str(r_sisco.get('Endereço', '')) if r_sisco is not None else ""
         
+        localidade_auto = str(r_notas.get('LOCALIDADE', '')) if r_notas is not None else ""
+        if not localidade_auto or localidade_auto.lower() == 'nan':
+            localidade_auto = str(r_sisco.get('Localidade', '')) if r_sisco is not None else ""
+        if localidade_auto.lower() == 'nan': localidade_auto = ""
+
         pi_auto = str(r_notas.get('TIPO LIGAÇÃO', r_notas.get('TIPO NOTA', ''))) if r_notas is not None else ""
         if not pi_auto or pi_auto.lower() == 'nan': pi_auto = str(r_sisco.get('Tipo de Projeto(PI)', '')) if r_sisco is not None else ""
         if pi_auto.lower() == 'nan': pi_auto = ""
@@ -336,6 +337,7 @@ with c2:
         <tr><td class="lbl">Status SAP</td><td class="val">{status_sap}</td></tr>
         <tr><td class="lbl">Data Abertura</td><td class="val">{data_abertura}</td></tr>
         <tr><td class="lbl">Fase</td><td class="val">{fase}</td></tr>
+        <tr><td class="lbl">Localidade</td><td class="val">{localidade_auto}</td></tr>
         <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
         <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
         <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LAT / LONG</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
