@@ -224,7 +224,7 @@ with c1:
 
 cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon, status_sap = "", "", "", "", "", "", "", ""
 cidade_auto, cliente_auto, endereco_auto, localidade_auto, area_resp, reg_raw, obs = "", "", "", "", "", "", ""
-obs_extra, id_sisco, prioridade = "", "", ""
+obs_extra, id_sisco, prioridade, levantador = "", "", "", ""
 pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
 responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
 obra_relampago_formatada = ""
@@ -303,7 +303,6 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
             localidade_auto = str(r_sisco.get('Localidade', '')) if r_sisco is not None else ""
         if localidade_auto.lower() == 'nan': localidade_auto = ""
 
-        # Extração do ID SISCO e PRIORIDADE
         id_sisco = ""
         if r_notas is not None:
             id_sisco = str(r_notas.get('ID SISCO', r_notas.get('ID Sisco', '')))
@@ -319,6 +318,15 @@ if solicitacoes and (not df_sisco.empty or not df_notas.empty):
             if r_sisco is not None:
                 prioridade = str(r_sisco.get('PRIORIDADE', r_sisco.get('Prioridade', '')))
         prioridade = prioridade if prioridade.lower() != 'nan' else ""
+        
+        # Extração do Levantador
+        levantador = ""
+        if r_notas is not None:
+            levantador = str(r_notas.get('LEVANTADOR', r_notas.get('Levantador', '')))
+        if not levantador or levantador.lower() == 'nan':
+            if r_sisco is not None:
+                levantador = str(r_sisco.get('LEVANTADOR', r_sisco.get('Levantador', '')))
+        levantador = levantador if levantador.lower() != 'nan' else ""
 
         pi_auto = str(r_notas.get('TIPO LIGAÇÃO', r_notas.get('TIPO NOTA', ''))) if r_notas is not None else ""
         if not pi_auto or pi_auto.lower() == 'nan': pi_auto = str(r_sisco.get('Tipo de Projeto(PI)', '')) if r_sisco is not None else ""
@@ -357,6 +365,7 @@ with c2:
         <tr><td class="lbl">Localidade</td><td class="val">{localidade_auto}</td></tr>
         <tr><td class="lbl">ID Sisco</td><td class="val">{id_sisco}</td></tr>
         <tr><td class="lbl">Prioridade</td><td class="val">{prioridade}</td></tr>
+        <tr><td class="lbl">Levantador</td><td class="val">{levantador}</td></tr>
         <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
         <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
         <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LAT / LONG</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
