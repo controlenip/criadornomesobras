@@ -6,7 +6,7 @@ import base64
 import re
 
 # ==========================================
-# 1. CONFIGURAÇÕES DA PÁGINA
+# 1. CONFIGURAÇÕES DA PÁGINA E CSS
 # ==========================================
 st.set_page_config(page_title="Relatório de Expurgo", page_icon="📊", layout="centered")
 
@@ -23,6 +23,9 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Logo da Equatorial em Base64 (Para não precisar de arquivo externo)
+LOGO_EQTL_B64 = "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"
 
 # ==========================================
 # FUNÇÕES DE DADOS
@@ -112,8 +115,8 @@ st.markdown("""
 html_form = f"""
 <style>
 .form-container {{ width: 100%; max-width: 800px; margin: 0 auto; font-family: Arial, sans-serif; font-size: 11px; color: black; background: white; }}
-.header-box {{ background-color: #1b365d; color: white; display: flex; align-items: center; height: 50px; padding: 0 15px; border: 1.5px solid black; margin-bottom: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-.header-logo {{ font-weight: bold; border-right: 1.5px solid white; padding-right: 15px; margin-right: 15px; line-height: 1.1; text-align: left; }}
+.header-box {{ background-color: #003399; color: white; display: flex; align-items: center; height: 50px; padding: 0 15px; border: 1.5px solid black; margin-bottom: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+.header-logo {{ border-right: 1.5px solid white; padding-right: 15px; margin-right: 15px; height: 35px; display: flex; align-items: center; justify-content: center; }}
 .header-title {{ font-size: 16px; margin: 0; text-align: center; flex-grow: 1; margin-left: -80px; font-weight: bold; }}
 
 .section-title {{ background-color: #1b365d; color: white; font-weight: bold; padding: 4px 8px; border: 1.5px solid black; margin-bottom: 4px; font-size: 11px; -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1; }}
@@ -131,9 +134,9 @@ html_form = f"""
 
 <div id="area-impressao" class="form-container">
 
-    <!-- CABEÇALHO AZUL -->
+    <!-- CABEÇALHO AZUL COM A LOGO EMBUTIDA -->
     <div class="header-box">
-        <div class="header-logo"><span style="font-size: 7px;">GRUPO</span><br><span style="font-size: 16px;">equatorial</span><br><span style="font-size: 7px; font-weight: normal; letter-spacing: 1px;">ENERGIA</span></div>
+        <div class="header-logo"><img src="data:image/png;base64,{LOGO_EQTL_B64}" style="height: 30px;"></div>
         <div class="header-title">Formulário de Não Atendimento Expansão</div>
     </div>
 
@@ -233,7 +236,7 @@ html_form = f"""
       </tr>
     </table>
 
-    <!-- EVIDÊNCIAS (Proporção diferente para caber o texto) -->
+    <!-- EVIDÊNCIAS -->
     <div class="section-title">Evidências:</div>
     <table class="t-table">
       <colgroup><col style="width: 25%;"><col style="width: 23%;"><col style="width: 4%;"><col style="width: 25%;"><col style="width: 23%;"></colgroup>
