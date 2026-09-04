@@ -334,11 +334,14 @@ with c2:
         <tr><td class="lbl">Levantador</td><td class="val">{levantador}</td></tr>
         <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
         <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
-        <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LAT / LONG</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
+        <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LATITUDE / LONGITUDE</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
     </table>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 11px; font-weight: 700; color: #0284c7; margin-top: -10px; margin-bottom: 2px;">📋 COPIAR COORDENADAS:</div>', unsafe_allow_html=True)
+    st.code(f"{lat},{lon}", language="text")
+    
+    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px; margin-top: 10px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
     
     def criar_linha_input(label, widget_type, key, options=None):
         cA, cB = st.columns([1, 2.5], gap="small")
