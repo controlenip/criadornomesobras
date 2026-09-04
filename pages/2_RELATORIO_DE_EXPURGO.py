@@ -62,7 +62,7 @@ else:
 # PAINEL MINIMALISTA DE ENTRADA (TOPO)
 # ==========================================
 st.markdown('<div class="painel-topo">', unsafe_allow_html=True)
-c1, c2, c3 = st.columns([1.5, 1.5, 0.8])
+c1, c2 = st.columns([1.5, 1.5])
 prot_input = c1.text_input("Nº da Nota / Protocolo:")
 foto_upload = c2.file_uploader("Foto da Evidência:", type=['png', 'jpg', 'jpeg'])
 st.markdown('</div>', unsafe_allow_html=True)
@@ -95,7 +95,7 @@ if nota_val and not df_notas.empty:
 foto_base64 = ""
 if foto_upload is not None:
     foto_base64 = base64.b64encode(foto_upload.read()).decode()
-    img_html = f'<img src="data:image/png;base64,{foto_base64}" style="max-height: 250px; width: auto; object-fit: contain;">'
+    img_html = f'<img src="data:image/png;base64,{foto_base64}" style="max-height: 250px; width: 100%; object-fit: contain;">'
 else:
     img_html = '<span style="color: #ccc; font-style: italic;">Nenhuma imagem anexada</span>'
 
@@ -107,21 +107,30 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# CONSTRUÇÃO DO HTML (FORMULÁRIO IDÊNTICO)
+# CONSTRUÇÃO DO HTML (FORMULÁRIO ESTRITO)
 # ==========================================
 html_form = f"""
 <style>
-.form-container {{ width: 100%; max-width: 800px; margin: 0 auto; font-family: Arial, sans-serif; font-size: 12px; color: black; background: white; }}
-.header-box {{ background-color: #1b365d; color: white; display: flex; align-items: center; height: 50px; padding: 0 15px; border: 1.5px solid black; margin-bottom: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+.form-container {{ width: 100%; max-width: 800px; margin: 0 auto; font-family: Arial, sans-serif; font-size: 11px; color: black; background: white; }}
+.header-box {{ background-color: #1b365d; color: white; display: flex; align-items: center; height: 50px; padding: 0 15px; border: 1.5px solid black; margin-bottom: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
 .header-logo {{ font-weight: bold; font-size: 13px; border-right: 1.5px solid white; padding-right: 15px; margin-right: 15px; line-height: 1; }}
-.header-title {{ font-size: 18px; margin: 0; text-align: center; flex-grow: 1; margin-left: -80px; font-weight: bold; }}
-.section-title {{ background-color: #1b365d; color: white; font-weight: bold; padding: 4px 8px; border: 1.5px solid black; margin-bottom: 5px; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-.t-table {{ width: 100%; border-collapse: collapse; margin-bottom: 5px; }}
-.t-table td {{ border: 1.5px solid black; padding: 4px 5px; vertical-align: middle; height: 26px; }}
-.lbl {{ font-weight: bold; text-align: center; font-size: 11px; background-color: white; }}
-.val {{ padding: 0 !important; }}
-.fi {{ width: 100%; height: 100%; border: none; outline: none; background: transparent; font-family: Arial, sans-serif; font-size: 11px; font-weight: bold; color: black; padding: 4px; box-sizing: border-box; text-transform: uppercase; text-align: center; }}
-.fa {{ width: 100%; border: none; outline: none; background: transparent; font-family: Arial, sans-serif; font-size: 11px; font-weight: bold; color: black; padding: 4px; box-sizing: border-box; resize: none; overflow: hidden; min-height: 26px; text-transform: uppercase; text-align: center; }}
+.header-title {{ font-size: 16px; margin: 0; text-align: center; flex-grow: 1; margin-left: -80px; font-weight: bold; }}
+
+.section-title {{ background-color: #1b365d; color: white; font-weight: bold; padding: 4px 8px; border: 1.5px solid black; margin-bottom: 4px; font-size: 11px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+
+.t-table {{ width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; }}
+.t-table td {{ border: 1.5px solid black; vertical-align: middle; height: 26px; overflow: hidden; padding: 0; margin: 0; box-sizing: border-box; }}
+
+.celula-label {{ font-weight: bold; text-align: center; background-color: white; padding: 0 4px !important; }}
+.celula-label-esq {{ font-weight: bold; text-align: left; background-color: white; padding: 0 4px !important; font-size: 9px; line-height: 1.1; }}
+
+.celula-valor {{ text-align: center; }}
+.celula-valor-esq {{ text-align: left; }}
+
+.fi {{ width: 100%; height: 100%; border: none; outline: none; background: transparent; font-family: Arial, sans-serif; font-size: 11px; font-weight: bold; color: black; text-align: center; text-transform: uppercase; padding: 0; margin: 0; display: block; }}
+.fi-esq {{ width: 100%; height: 100%; border: none; outline: none; background: transparent; font-family: Arial, sans-serif; font-size: 11px; font-weight: bold; color: black; text-align: left; text-transform: uppercase; padding: 0 4px; margin: 0; display: block; }}
+.fa {{ width: 100%; border: none; outline: none; background: transparent; font-family: Arial, sans-serif; font-size: 11px; font-weight: bold; color: black; resize: none; min-height: 26px; text-transform: uppercase; text-align: center; padding: 4px 0; margin: 0; display: block; }}
+
 .bg-blue {{ background-color: #cbe0f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
 .no-border {{ border: none !important; }}
 </style>
@@ -135,107 +144,107 @@ html_form = f"""
     </div>
 
     <!-- DISTRIBUIDORA / REGIONAL -->
-    <table class="t-table" style="margin-bottom: 15px;">
+    <table class="t-table">
       <tr>
-        <td class="lbl" style="width: 15%;">Distribuidora:</td>
-        <td class="val" style="width: 15%;"><input type="text" class="fi" value="EQTL MA"></td>
-        <td class="no-border" style="width: 18%;"></td>
-        <td class="lbl" style="width: 15%;">Regional:</td>
-        <td class="val" style="width: 15%;"><input type="text" class="fi" value="{regional}"></td>
-        <td class="no-border" style="width: 2%;"></td>
-        <td class="lbl" style="width: 10%; font-size: 9px; line-height: 1.1; padding: 2px;">Data da<br>solicitação:</td>
-        <td class="val" style="width: 10%;"><input type="text" class="fi" value="{data_ab}"></td>
+        <td class="celula-label" style="width: 15%;">Distribuidora:</td>
+        <td class="celula-valor" style="width: 15%;"><input type="text" class="fi" value="EQTL MA"></td>
+        <td class="no-border" style="width: 20%;"></td>
+        <td class="celula-label" style="width: 15%;">Regional:</td>
+        <td class="celula-valor" style="width: 15%;"><input type="text" class="fi" value="{regional}"></td>
+        <td class="no-border" style="width: 5%;"></td>
+        <td class="celula-label" style="width: 10%; font-size: 9px; line-height: 1.1;">Data da<br>solicitação:</td>
+        <td class="celula-valor" style="width: 10%;"><input type="text" class="fi" value="{data_ab}"></td>
       </tr>
     </table>
 
     <!-- DADOS DO CLIENTE -->
     <div class="section-title">Dados do Cliente:</div>
-    <table class="t-table">
+    <table class="t-table" style="margin-bottom: 4px;">
       <tr>
-        <td class="lbl" style="width: 15%;">Nº da nota:</td>
-        <td class="val" style="width: 35%;"><input type="text" class="fi" value="{nota_val}"></td>
+        <td class="celula-label" style="width: 15%;">Nº da nota:</td>
+        <td class="celula-valor" style="width: 40%;"><input type="text" class="fi" value="{nota_val}"></td>
         <td class="no-border" style="width: 10%;"></td>
-        <td class="lbl" style="width: 15%;">Conta Contrato:</td>
-        <td class="val" style="width: 25%;"><input type="text" class="fi" value="{cc}"></td>
+        <td class="celula-label" style="width: 15%;">Conta Contrato:</td>
+        <td class="celula-valor" style="width: 20%;"><input type="text" class="fi" value="{cc}"></td>
+      </tr>
+    </table>
+    <table class="t-table" style="margin-bottom: 4px;">
+      <tr>
+        <td class="celula-label-esq" style="width: 20%; font-size: 11px;">Parceiro de Negócios:</td>
+        <td class="celula-valor" style="width: 80%;"><input type="text" class="fi" value="{parceiro}"></td>
       </tr>
     </table>
     <table class="t-table">
       <tr>
-        <td class="lbl" style="width: 20%;">Parceiro de Negócios:</td>
-        <td class="val" style="width: 80%;"><input type="text" class="fi" value="{parceiro}"></td>
-      </tr>
-    </table>
-    <table class="t-table" style="margin-bottom: 15px;">
-      <tr>
-        <td class="lbl" style="width: 15%;">Endereço:</td>
-        <td class="val" style="width: 85%;"><input type="text" class="fi" value="{endereco}"></td>
+        <td class="celula-label" style="width: 15%;">Endereço:</td>
+        <td class="celula-valor" style="width: 85%;"><input type="text" class="fi" value="{endereco}"></td>
       </tr>
     </table>
 
     <!-- DADOS DA VISITA -->
     <div class="section-title">Dados da Visita:</div>
-    <table class="t-table">
+    <table class="t-table" style="margin-bottom: 4px;">
       <tr>
-        <td class="lbl" style="width: 15%;">Data:</td>
-        <td class="val" style="width: 35%;"><input type="text" class="fi" value=""></td>
+        <td class="celula-label" style="width: 15%;">Data:</td>
+        <td class="celula-valor" style="width: 40%;"><input type="text" class="fi" value=""></td>
         <td class="no-border" style="width: 10%;"></td>
-        <td class="lbl" style="width: 15%;">Latitude:</td>
-        <td class="val" style="width: 25%;"><input type="text" class="fi" value=""></td>
+        <td class="celula-label" style="width: 15%;">Latitude:</td>
+        <td class="celula-valor" style="width: 20%;"><input type="text" class="fi" value=""></td>
+      </tr>
+    </table>
+    <table class="t-table" style="margin-bottom: 4px;">
+      <tr>
+        <td class="celula-label" style="width: 15%;">Horário:</td>
+        <td class="celula-valor" style="width: 40%;"><input type="text" class="fi" value=""></td>
+        <td class="no-border" style="width: 10%;"></td>
+        <td class="celula-label" style="width: 15%;">Longitude:</td>
+        <td class="celula-valor" style="width: 20%;"><input type="text" class="fi" value=""></td>
       </tr>
     </table>
     <table class="t-table">
       <tr>
-        <td class="lbl" style="width: 15%;">Horário:</td>
-        <td class="val" style="width: 35%;"><input type="text" class="fi" value=""></td>
-        <td class="no-border" style="width: 10%;"></td>
-        <td class="lbl" style="width: 15%;">Longitude:</td>
-        <td class="val" style="width: 25%;"><input type="text" class="fi" value=""></td>
-      </tr>
-    </table>
-    <table class="t-table" style="margin-bottom: 15px;">
-      <tr>
-        <td class="lbl" style="width: 25%;">Identificação da equipe:</td>
-        <td class="val" style="width: 75%;"><input type="text" class="fi" value="EQP NIP"></td>
+        <td class="celula-label-esq" style="width: 20%; font-size: 11px;">Identificação da<br>equipe:</td>
+        <td class="celula-valor" style="width: 80%;"><input type="text" class="fi" value="EQP NIP"></td>
       </tr>
     </table>
 
     <!-- MOTIVO DO EXPURGO -->
     <div class="section-title">Motivo do expurgo:</div>
-    <table class="t-table">
+    <table class="t-table" style="margin-bottom: 4px;">
       <tr>
-        <td class="lbl" style="width: 20%;">Justificativa:</td>
-        <td class="val" style="width: 80%;"><input type="text" class="fi" value=""></td>
+        <td class="celula-label-esq" style="width: 20%; font-size: 11px;">Justificativa:</td>
+        <td class="celula-valor" style="width: 80%;"><input type="text" class="fi" value=""></td>
+      </tr>
+    </table>
+    <table class="t-table" style="margin-bottom: 4px;">
+      <tr>
+        <td class="celula-label-esq" style="width: 20%; font-size: 11px;">Descrição do Expurgo:</td>
+        <td class="celula-valor" style="width: 80%;"><textarea class="fa"></textarea></td>
       </tr>
     </table>
     <table class="t-table">
       <tr>
-        <td class="lbl" style="width: 20%;">Descrição do Expurgo:</td>
-        <td class="val" style="width: 80%; padding: 0;"><textarea class="fa"></textarea></td>
-      </tr>
-    </table>
-    <table class="t-table" style="margin-bottom: 15px;">
-      <tr>
-        <td class="lbl bg-blue" style="width: 20%;">Tratativa no Sistema<br>Comercial:</td>
-        <td class="val bg-blue" style="width: 80%;"><input type="text" class="fi bg-blue" value=""></td>
+        <td class="celula-label-esq bg-blue" style="width: 20%; font-size: 11px;">Tratativa no Sistema<br>Comercial:</td>
+        <td class="celula-valor bg-blue" style="width: 80%;"><input type="text" class="fi bg-blue" value=""></td>
       </tr>
     </table>
 
     <!-- EVIDÊNCIAS -->
     <div class="section-title">Evidências:</div>
-    <table class="t-table" style="margin-bottom: 10px;">
+    <table class="t-table">
       <tr>
-        <td class="lbl" style="width: 23%; text-align: left; font-size: 10px; padding-left: 8px;">Número do medidor<br>do cliente atendido:</td>
-        <td class="val" style="width: 25%;"><input type="text" class="fi" value=""></td>
+        <td class="celula-label-esq" style="width: 25%;">Número do medidor<br>do cliente atendido:</td>
+        <td class="celula-valor" style="width: 23%;"><input type="text" class="fi" value=""></td>
         <td class="no-border" style="width: 4%;"></td>
-        <td class="lbl" style="width: 23%; text-align: left; font-size: 10px; padding-left: 8px;">Número da nota do<br>atendimento em campo:</td>
-        <td class="val" style="width: 25%;"><input type="text" class="fi" value="{nota_val}"></td>
+        <td class="celula-label-esq" style="width: 25%;">Número da nota do<br>atendimento em campo:</td>
+        <td class="celula-valor" style="width: 23%;"><input type="text" class="fi" value="{nota_val}"></td>
       </tr>
       <tr>
-        <td class="lbl" style="width: 23%; text-align: left; font-size: 10px; border-top: none; padding-left: 8px;">Número do medidor<br>do vizinho:</td>
-        <td class="val" style="width: 25%; border-top: none;"><input type="text" class="fi" value=""></td>
+        <td class="celula-label-esq" style="width: 25%; border-top: none;">Número do medidor<br>do vizinho:</td>
+        <td class="celula-valor" style="width: 23%; border-top: none;"><input type="text" class="fi" value=""></td>
         <td class="no-border" style="width: 4%;"></td>
-        <td class="lbl" style="width: 23%; text-align: left; font-size: 10px; border-top: none; padding-left: 8px;">Número da estrutura<br>mais próxima:</td>
-        <td class="val" style="width: 25%; border-top: none;"><input type="text" class="fi" value=""></td>
+        <td class="celula-label-esq" style="width: 25%; border-top: none;">Número da estrutura<br>mais próxima:</td>
+        <td class="celula-valor" style="width: 23%; border-top: none;"><input type="text" class="fi" value=""></td>
       </tr>
     </table>
 
