@@ -92,7 +92,7 @@ def buscar_info(row, colunas_alvo):
 @st.cache_data(show_spinner=False)
 def carregar_dados(file_path, mtime):
     xls = pd.ExcelFile(file_path)
-    
+        
     try: 
         df_notas = pd.read_excel(xls, sheet_name='NOTAS')
     except: 
@@ -113,7 +113,7 @@ def carregar_dados(file_path, mtime):
     if not df_dados.empty:
         df_dados.columns = df_dados.columns.str.strip().str.upper()
     
-    return df_notas, df_dados
+    return pd.DataFrame(), df_notas, df_dados # Retornando DF vazio para SISCO, pois não é mais usado
 
 # ==========================================
 # 2. LOGO NO TOPO E DADOS PADRÃO
@@ -147,7 +147,7 @@ map_tipo_obra, map_mun = {}, {}
 if os.path.exists(arquivo_bd):
     mtime = os.path.getmtime(arquivo_bd) 
     with st.spinner("Carregando banco de dados..."):
-        df_notas, df_dados = carregar_dados(arquivo_bd, mtime)
+        _, df_notas, df_dados = carregar_dados(arquivo_bd, mtime)
         
     if not df_dados.empty:
         if 'TIPO DE OBRA' in df_dados.columns: lista_tipos_obra = sorted(df_dados['TIPO DE OBRA'].dropna().unique().tolist())
@@ -184,6 +184,11 @@ with c1:
     
     if sols_input and sols_input.strip():
         parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
+        
+        # === NOVO: QUADRO LIST/SISCO GERADO AUTOMATICAMENTE ===
+        if parts:
+            st.markdown('<div style="font-size: 11px; font-weight: 700; color: #0284c7; margin-top: -5px; margin-bottom: 2px;">📋 LIST/SISCO (Copie no botão acima à direita):</div>', unsafe_allow_html=True)
+            st.code("; ".join(parts), language="text")
         
         notas_processadas = []
         for sol in parts:
@@ -303,11 +308,9 @@ if solicitacoes and not df_notas.empty:
         reg_raw = str(r_notas.get('REGIONAL', '')).upper()
         if reg_raw.lower() == 'NAN': reg_raw = ""
         
-        obs = str(r_notas.get('INFORMAÇÕES', ''))
-        if obs.lower() == 'nan': obs = ""
-
-        obs_extra = str(r_notas.get('INFORMAÇÕES EXTRAS', ''))
-        if obs_extra.lower() == 'nan': obs_extra = ""
+        # Leitura Direta Exclusiva com Função Blindada
+        obs = buscar_info(r_notas, ['INFORMACOES'])
+        obs_extra = buscar_info(r_notas, ['INFORMACOESEXTRAS'])
         
     else:
         st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
@@ -407,7 +410,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         tipo_nota_parceiro = str(r_dados.get('TIPO DE NS|PARCEIRO', ''))
         responsavel_obra = str(r_dados.get('RESP. OBRA', ''))
         
-        # MUDANÇA: CÁLCULO DINÂMICO DE DATA (Data de Hoje + Qtd Dias)
         qtd_dias_str = str(r_dados.get('QTD DIAS', '')).replace('.0', '').strip()
         
         if qtd_dias_str.isdigit():
@@ -415,7 +417,6 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
             nova_data_calc = datetime.date.today() + datetime.timedelta(days=dias_int)
             data_aprov = f"{nova_data_calc.strftime('%d/%m/%Y')} ({dias_int} DIAS)"
         else:
-            # Fallback se a coluna não for número
             data_aprov_raw = str(r_dados.get('DATA FINAL', ''))
             data_aprov_formatada = formatar_data(data_aprov_raw)
             data_aprov = f"{data_aprov_formatada} ({qtd_dias_str} DIAS)" if data_aprov_formatada else ""
