@@ -5,6 +5,7 @@ import os
 import base64
 import re
 import random
+import datetime
 
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS
@@ -72,13 +73,26 @@ def formatar_data(data_raw):
         return str(data_raw)[:10]
 
 # ==========================================
-# NOVA REGRA DE LEITURA (EXCLUSIVA PARA NOTAS E DADOS)
+# FUNÇÃO BLINDADA EXTREMA
 # ==========================================
+def buscar_info(row, colunas_alvo):
+    if row is None or row.empty: return ""
+    for col in row.index:
+        col_limpa = re.sub(r'[^A-Z0-9]', '', remover_acentos(str(col)).upper())
+        col_limpa = re.sub(r'\d+$', '', col_limpa) 
+        
+        for alvo in colunas_alvo:
+            alvo_limpo = re.sub(r'[^A-Z0-9]', '', remover_acentos(alvo).upper())
+            if col_limpa == alvo_limpo:
+                val = str(row[col]).strip()
+                if val and val.lower() not in ['nan', 'none', 'null', '']:
+                    return val
+    return ""
+
 @st.cache_data(show_spinner=False)
 def carregar_dados(file_path, mtime):
     xls = pd.ExcelFile(file_path)
     
-    # 1. Leitura direta e exclusiva da aba NOTAS
     try: 
         df_notas = pd.read_excel(xls, sheet_name='NOTAS')
     except: 
@@ -86,13 +100,10 @@ def carregar_dados(file_path, mtime):
         except: df_notas = pd.DataFrame()
         
     if not df_notas.empty:
-        # Padroniza nomes das colunas arrancando espaços e lixo oculto do Excel
         df_notas.columns = df_notas.columns.str.strip().str.upper()
         if 'PROTOCOLO' in df_notas.columns:
-            # Garante que o protocolo seja uma string exata e sem ".0"
             df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).replace(r'\.0$', '', regex=True).str.strip()
             
-    # 2. Leitura da aba DADOS
     try: 
         df_dados = pd.read_excel(xls, sheet_name='DADOS', header=1)
     except:
@@ -134,7 +145,7 @@ df_notas, df_dados = pd.DataFrame(), pd.DataFrame()
 map_tipo_obra, map_mun = {}, {}
 
 if os.path.exists(arquivo_bd):
-    mtime = os.path.getmtime(arquivo_bd) # Atualiza imediatamente ao salvar o Excel novo
+    mtime = os.path.getmtime(arquivo_bd) 
     with st.spinner("Carregando banco de dados..."):
         df_notas, df_dados = carregar_dados(arquivo_bd, mtime)
         
@@ -229,7 +240,7 @@ descricoes_list = []
 nomes_obras_list = []
 
 # ==========================================
-# EXTRAÇÃO DE DADOS APENAS DA ABA NOTAS E DADOS (SEM SISCO / SEM PLANO B)
+# EXTRAÇÃO DE DADOS APENAS DA ABA NOTAS E DADOS
 # ==========================================
 if solicitacoes and not df_notas.empty:
     solicitacao_principal = solicitacoes[0]
@@ -292,7 +303,6 @@ if solicitacoes and not df_notas.empty:
         reg_raw = str(r_notas.get('REGIONAL', '')).upper()
         if reg_raw.lower() == 'NAN': reg_raw = ""
         
-        # Leitura Direta Exclusiva - Acabou o "Proximo a Escola"
         obs = str(r_notas.get('INFORMAÇÕES', ''))
         if obs.lower() == 'nan': obs = ""
 
@@ -397,11 +407,18 @@ if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
         tipo_nota_parceiro = str(r_dados.get('TIPO DE NS|PARCEIRO', ''))
         responsavel_obra = str(r_dados.get('RESP. OBRA', ''))
         
-        qtd_dias = str(r_dados.get('QTD DIAS', '')).replace('.0', '')
+        # MUDANÇA: CÁLCULO DINÂMICO DE DATA (Data de Hoje + Qtd Dias)
+        qtd_dias_str = str(r_dados.get('QTD DIAS', '')).replace('.0', '').strip()
         
-        data_aprov_raw = str(r_dados.get('DATA FINAL', ''))
-        data_aprov_formatada = formatar_data(data_aprov_raw)
-        data_aprov = f"{data_aprov_formatada} ({qtd_dias} DIAS)" if data_aprov_formatada else ""
+        if qtd_dias_str.isdigit():
+            dias_int = int(qtd_dias_str)
+            nova_data_calc = datetime.date.today() + datetime.timedelta(days=dias_int)
+            data_aprov = f"{nova_data_calc.strftime('%d/%m/%Y')} ({dias_int} DIAS)"
+        else:
+            # Fallback se a coluna não for número
+            data_aprov_raw = str(r_dados.get('DATA FINAL', ''))
+            data_aprov_formatada = formatar_data(data_aprov_raw)
+            data_aprov = f"{data_aprov_formatada} ({qtd_dias_str} DIAS)" if data_aprov_formatada else ""
         
         if pi_ativo in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"]:
             total_val = 7000 * (len(solicitacoes) if solicitacoes else 1)
