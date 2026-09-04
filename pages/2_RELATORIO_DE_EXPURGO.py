@@ -19,7 +19,7 @@ st.markdown("""
     /* Esconde os menus laterais e o resto do site na hora de imprimir o PDF */
     @media print {
         body * { visibility: hidden; }
-        #area-impressao, #area-impressao * { visibility: visible; }
+        #area-impressao, #area-impressao * { visibility: visible !important; }
         #area-impressao { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0;}
         .stButton, header, [data-testid="stSidebar"] { display: none !important; }
     }
@@ -151,7 +151,7 @@ with col_input:
 foto_base64 = ""
 if foto_upload is not None:
     foto_base64 = base64.b64encode(foto_upload.read()).decode()
-    img_html = f'<img src="data:image/png;base64,{foto_base64}" style="max-height: 400px; max-width: 100%; object-fit: contain;">'
+    img_html = f'<img src="data:image/png;base64,{foto_base64}" style="max-height: 380px; max-width: 100%; object-fit: contain;">'
 else:
     img_html = '<span style="color: #ccc; font-style: italic;">Nenhuma imagem anexada</span>'
 
@@ -167,128 +167,133 @@ with col_preview:
         </div>
     """, unsafe_allow_html=True)
     
-    # ATENÇÃO: O TEXTO ABAIXO NÃO PODE TER ESPAÇOS ANTES DO <div id="area-impressao">
+    # IMPORTANTE: O HTML abaixo foi estruturado sem recuos e espaços à esquerda
+    # para impedir que o Streamlit transforme a tabela em um "bloco de código".
     html_form = f"""
 <div id="area-impressao" style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: black; background-color: white; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
 
-    <!-- CABEÇALHO AZUL -->
-    <div style="background-color: #1b365d; width: 100%; height: 50px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px; border: 1px solid black;">
-        <h2 style="color: white; margin: 0; font-size: 18px; padding-left: 20px;">Formulário de Não Atendimento Expansão</h2>
-    </div>
+<!-- CABEÇALHO AZUL COM LOGO SIMULADA -->
+<div style="background-color: #1b365d; width: 100%; height: 60px; display: flex; align-items: center; margin-bottom: 15px; border: 1px solid black; padding: 0 15px; box-sizing: border-box;">
+<div style="color: white; font-weight: bold; font-size: 14px; border-right: 2px solid white; padding-right: 15px; margin-right: 15px; line-height: 1;">GRUPO<br><span style="font-size: 18px;">equatorial</span><br><span style="font-size: 8px; font-weight: normal; letter-spacing: 2px;">ENERGIA</span></div>
+<h2 style="color: white; margin: 0; font-size: 18px; flex-grow: 1; text-align: center; margin-left: -80px;">Formulário de Não Atendimento Expansão</h2>
+</div>
 
-    <!-- DISTRIBUIDORA / REGIONAL -->
-    <div style="margin-bottom: 12px;">
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Distribuidora:</td>
-                <td style="border: 1px solid black; width: 15%; text-align: center; font-size: 12px;">EQTL MA</td>
-                <td style="border: none; width: 20%;"></td>
-                <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Regional:</td>
-                <td style="border: 1px solid black; width: 15%; text-align: center; font-size: 12px;">{regional}</td>
-                <td style="border: none; width: 5%;"></td>
-                <td style="border: 1px solid black; width: 10%; font-weight: bold; text-align: center; font-size: 10px; line-height: 1;">Data da<br>abertura:</td>
-                <td style="border: 1px solid black; width: 10%; text-align: center; font-size: 12px;">{data_ab}</td>
-            </tr>
-        </table>
-    </div>
+<!-- DISTRIBUIDORA / REGIONAL -->
+<div style="margin-bottom: 12px;">
+<table style="width: 100%; border-collapse: collapse;">
+<tr>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Distribuidora:</td>
+<td style="border: 1px solid black; width: 15%; text-align: center; font-size: 12px; font-weight: bold;">EQTL MA</td>
+<td style="border: none; width: 20%;"></td>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Regional:</td>
+<td style="border: 1px solid black; width: 15%; text-align: center; font-size: 12px;">{regional}</td>
+<td style="border: none; width: 5%;"></td>
+<td style="border: 1px solid black; width: 10%; font-weight: bold; text-align: center; font-size: 10px; line-height: 1;">Data da<br>abertura:</td>
+<td style="border: 1px solid black; width: 10%; text-align: center; font-size: 12px;">{data_ab}</td>
+</tr>
+</table>
+</div>
 
-    <!-- DADOS DO CLIENTE -->
-    <div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Dados do Cliente:</div>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
-        <tr>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Nº da nota:</td>
-            <td style="border: 1px solid black; width: 35%; font-size: 12px; padding-left: 8px; font-weight: bold;">{prot_input.upper()}</td>
-            <td style="border: none; width: 10%;"></td>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Conta Contrato:</td>
-            <td style="border: 1px solid black; width: 25%; font-size: 12px; padding-left: 8px; font-weight: bold;">{cc}</td>
-        </tr>
-    </table>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
-        <tr>
-            <td style="border: 1px solid black; width: 20%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Parceiro de Negócios:</td>
-            <td style="border: 1px solid black; width: 80%; font-size: 12px; padding-left: 8px;">{parceiro}</td>
-        </tr>
-    </table>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-        <tr>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Endereço:</td>
-            <td style="border: 1px solid black; width: 85%; font-size: 12px; padding-left: 8px;">{endereco}</td>
-        </tr>
-    </table>
+<!-- DADOS DO CLIENTE -->
+<div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Dados do Cliente:</div>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+<tr>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Nº da nota:</td>
+<td style="border: 1px solid black; width: 35%; font-size: 12px; padding-left: 8px; font-weight: bold;">{prot_input.upper()}</td>
+<td style="border: none; width: 10%;"></td>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Conta Contrato:</td>
+<td style="border: 1px solid black; width: 25%; font-size: 12px; padding-left: 8px; font-weight: bold;">{cc}</td>
+</tr>
+</table>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+<tr>
+<td style="border: 1px solid black; width: 20%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Parceiro de Negócios:</td>
+<td style="border: 1px solid black; width: 80%; font-size: 12px; padding-left: 8px;">{parceiro}</td>
+</tr>
+</table>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+<tr>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Endereço:</td>
+<td style="border: 1px solid black; width: 85%; font-size: 12px; padding-left: 8px;">{endereco}</td>
+</tr>
+</table>
 
-    <!-- DADOS DA VISITA -->
-    <div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Dados da Visita:</div>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
-        <tr>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Data:</td>
-            <td style="border: 1px solid black; width: 35%; font-size: 12px; padding-left: 8px;">{data_visita.strftime('%d/%m/%Y')}</td>
-            <td style="border: none; width: 10%;"></td>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Latitude:</td>
-            <td style="border: 1px solid black; width: 25%; font-size: 12px; padding-left: 8px;">{lat}</td>
-        </tr>
-    </table>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
-        <tr>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Horário:</td>
-            <td style="border: 1px solid black; width: 35%; font-size: 12px; padding-left: 8px;">{hora_visita.strftime('%H:%M') if hora_visita else ''}</td>
-            <td style="border: none; width: 10%;"></td>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Longitude:</td>
-            <td style="border: 1px solid black; width: 25%; font-size: 12px; padding-left: 8px;">{lon}</td>
-        </tr>
-    </table>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-        <tr>
-            <td style="border: 1px solid black; width: 25%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Identificação da equipe:</td>
-            <td style="border: 1px solid black; width: 75%; font-weight: bold; font-size: 12px; text-align: center;">EQP NIP</td>
-        </tr>
-    </table>
+<!-- DADOS DA VISITA -->
+<div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Dados da Visita:</div>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+<tr>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Data:</td>
+<td style="border: 1px solid black; width: 35%; font-size: 12px; padding-left: 8px;">{data_visita.strftime('%d/%m/%Y')}</td>
+<td style="border: none; width: 10%;"></td>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Latitude:</td>
+<td style="border: 1px solid black; width: 25%; font-size: 12px; padding-left: 8px;">{lat}</td>
+</tr>
+</table>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+<tr>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Horário:</td>
+<td style="border: 1px solid black; width: 35%; font-size: 12px; padding-left: 8px;">{hora_visita.strftime('%H:%M') if hora_visita else ''}</td>
+<td style="border: none; width: 10%;"></td>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px;">Longitude:</td>
+<td style="border: 1px solid black; width: 25%; font-size: 12px; padding-left: 8px;">{lon}</td>
+</tr>
+</table>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+<tr>
+<td style="border: 1px solid black; width: 25%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Identificação da equipe:</td>
+<td style="border: 1px solid black; width: 75%; font-weight: bold; font-size: 12px; text-align: center;">EQP NIP</td>
+</tr>
+</table>
 
-    <!-- MOTIVO DO EXPURGO -->
-    <div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Motivo do expurgo:</div>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
-        <tr>
-            <td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Justificativa:</td>
-            <td style="border: 1px solid black; width: 85%; font-size: 12px; padding-left: 8px;">{justificativa.upper()}</td>
-        </tr>
-    </table>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
-        <tr>
-            <td style="border: 1px solid black; width: 20%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Descrição do Expurgo:</td>
-            <td style="border: 1px solid black; width: 80%; font-size: 12px; padding-left: 8px; min-height: 25px;">{descricao.upper()}</td>
-        </tr>
-    </table>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-        <tr>
-            <td style="border: 1px solid black; width: 25%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px; background-color: #cbe0f5;">Tratativa no Sistema Comercial:</td>
-            <td style="border: 1px solid black; width: 75%; font-size: 12px; padding-left: 8px; background-color: #cbe0f5;">{tratativa.upper()}</td>
-        </tr>
-    </table>
+<!-- MOTIVO DO EXPURGO -->
+<div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Motivo do expurgo:</div>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+<tr>
+<td style="border: 1px solid black; width: 15%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Justificativa:</td>
+<td style="border: 1px solid black; width: 85%; font-size: 12px; padding-left: 8px;">{justificativa.upper()}</td>
+</tr>
+</table>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+<tr>
+<td style="border: 1px solid black; width: 20%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px;">Descrição do Expurgo:</td>
+<td style="border: 1px solid black; width: 80%; font-size: 12px; padding-left: 8px; min-height: 25px;">{descricao.upper()}</td>
+</tr>
+</table>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+<tr>
+<td style="border: 1px solid black; width: 25%; font-weight: bold; text-align: center; font-size: 12px; padding: 4px; background-color: #cbe0f5;">Tratativa no Sistema Comercial:</td>
+<td style="border: 1px solid black; width: 75%; font-size: 12px; padding-left: 8px; background-color: #cbe0f5;">{tratativa.upper()}</td>
+</tr>
+</table>
 
-    <!-- EVIDÊNCIAS -->
-    <div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Evidências:</div>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-        <tr>
-            <td style="border: 1px solid black; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px;">Número do medidor<br>do cliente atendido:</td>
-            <td style="border: 1px solid black; width: 23%; font-size: 12px; text-align: center;">{medidor_cli}</td>
-            <td style="border: none; width: 10%;"></td>
-            <td style="border: 1px solid black; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px;">Número da nota do<br>atendimento em campo:</td>
-            <td style="border: 1px solid black; width: 23%; font-size: 12px; text-align: center;">{nota_campo}</td>
-        </tr>
-        <tr>
-            <td style="border: 1px solid black; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px; border-top: none;">Número do medidor<br>do vizinho:</td>
-            <td style="border: 1px solid black; width: 23%; font-size: 12px; text-align: center; border-top: none;">{medidor_viz}</td>
-            <td style="border: none; width: 10%;"></td>
-            <td style="border: 1px solid black; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px; border-top: none;">Número da estrutura<br>mais próxima:</td>
-            <td style="border: 1px solid black; width: 23%; font-size: 12px; text-align: center; border-top: none;">{estrutura}</td>
-        </tr>
-    </table>
-    
-    <!-- FOTO -->
-    <div style="border: 1px solid black; width: 100%; height: 420px; display: flex; align-items: center; justify-content: center; background-color: #fafafa;">
-        {img_html}
-    </div>
+<!-- EVIDÊNCIAS -->
+<div style="background-color: #1b365d; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-bottom: 4px; border: 1px solid black;">Evidências:</div>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+<tr>
+<td style="border: 1px solid black; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px;">Número do medidor<br>do cliente atendido:</td>
+<td style="border: 1px solid black; width: 23%; font-size: 12px; text-align: center;">{medidor_cli}</td>
+<td style="border: none; width: 10%;"></td>
+<td style="border: 1px solid black; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px;">Número da nota do<br>atendimento em campo:</td>
+<td style="border: 1px solid black; width: 23%; font-size: 12px; text-align: center;">{nota_campo}</td>
+</tr>
+<tr>
+<td style="border: 1px solid black; border-top: none; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px;">Número do medidor<br>do vizinho:</td>
+<td style="border: 1px solid black; border-top: none; width: 23%; font-size: 12px; text-align: center;">{medidor_viz}</td>
+<td style="border: none; width: 10%;"></td>
+<td style="border: 1px solid black; border-top: none; width: 22%; font-weight: bold; text-align: left; font-size: 11px; padding: 4px;">Número da estrutura<br>mais próxima:</td>
+<td style="border: 1px solid black; border-top: none; width: 23%; font-size: 12px; text-align: center;">{estrutura}</td>
+</tr>
+</table>
+
+<!-- FOTO -->
+<div style="border: 1px solid black; width: 100%; height: 380px; display: flex; align-items: center; justify-content: center; background-color: #fafafa; overflow: hidden;">
+{img_html}
+</div>
 
 </div>
 """
 
+    # Camada extra de segurança: Remove qualquer espaço inicial persistente
+    html_form = re.sub(r'^[ \t]+', '', html_form, flags=re.MULTILINE)
+    
     st.markdown(html_form, unsafe_allow_html=True)
