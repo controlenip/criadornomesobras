@@ -42,10 +42,35 @@ st.markdown("""
     .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
     
     /* Regra para o botão de limpar ficar compacto e com o ícone visível */
-    button[kind="primary"] p {
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        color: #ffffff !important;
+    button[kind="primary"] p { font-size: 12px !important; font-weight: 700 !important; color: #ffffff !important; }
+    
+    /* ========================================================================= */
+    /* MÁGICA CSS: TRANSFORMA O BLOCO DE CÓDIGO NATIVO NA LINHA VERDE DA TABELA  */
+    /* ========================================================================= */
+    .lat-long-hook { display: none; }
+    div[data-testid="stElementContainer"]:has(.lat-long-hook) + div[data-testid="stElementContainer"] { margin-top: -16px !important; }
+    div[data-testid="stElementContainer"]:has(.lat-long-hook) + div[data-testid="stElementContainer"] > div {
+        background-color: #f0fdf4 !important;
+        border: 1px solid #cbd5e1 !important;
+        border-top: 1px solid #e2e8f0 !important;
+        border-radius: 0 0 4px 4px !important;
+        position: relative;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+    }
+    div[data-testid="stElementContainer"]:has(.lat-long-hook) + div[data-testid="stElementContainer"] > div::before {
+        content: "LATITUDE / LONGITUDE";
+        position: absolute; left: 0; top: 0; width: 38%; height: 100%;
+        background-color: #f0fdf4; color: #2563eb;
+        font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600;
+        display: flex; align-items: center; padding: 4px 8px;
+        border-right: 1px solid #e2e8f0; z-index: 1; box-sizing: border-box;
+    }
+    div[data-testid="stElementContainer"]:has(.lat-long-hook) + div[data-testid="stElementContainer"] pre {
+        margin: 0 !important; padding: 4px 8px !important; margin-left: 38% !important;
+        background-color: transparent !important; border: none !important; min-height: 26px; display: flex; align-items: center;
+    }
+    div[data-testid="stElementContainer"]:has(.lat-long-hook) + div[data-testid="stElementContainer"] code {
+        color: #0f172a !important; font-family: ui-sans-serif, system-ui, sans-serif !important; font-size: 11px !important; font-weight: 700 !important; background: transparent !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -319,7 +344,7 @@ if solicitacoes and not df_notas.empty:
 with c2:
     st.markdown(f"""
     <div class="eh">🎲 DADOS</div>
-    <table class="et">
+    <table class="et" style="margin-bottom: 0; border-bottom: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
         <tr><td class="lbl">Conta Contrato</td><td class="val">{cc}</td></tr>
         <tr><td class="lbl">Instalação CCS</td><td class="val">{instalacao}</td></tr>
         <tr><td class="lbl">Tipo de Obra</td><td class="val">{tipo_obra_sisco}</td></tr>
@@ -330,23 +355,17 @@ with c2:
         <tr><td class="lbl">ID Sisco</td><td class="val">{id_sisco}</td></tr>
         <tr><td class="lbl">Prioridade</td><td class="val">{prioridade}</td></tr>
         <tr><td class="lbl">Levantador</td><td class="val">{levantador}</td></tr>
-        <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
-        <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
+        <tr><td class="lbl text-blue" style="border-bottom: none;">LATITUDE</td><td class="val" style="border-bottom: none;">{lat}</td></tr>
+        <tr><td class="lbl text-blue" style="border-bottom: none;">LONGITUDE</td><td class="val" style="border-bottom: none;">{lon}</td></tr>
     </table>
+    <div class="lat-long-hook"></div>
     """, unsafe_allow_html=True)
     
-    # Campo de Código para Copiar com o Label perfeitamente alinhado na tabela
-    st.markdown("""
-        <div style="display: flex; align-items: stretch; border: 1px solid #e2e8f0; border-top: none; background-color: #f0fdf4; margin-top: -15px; margin-bottom: 15px; border-radius: 0 0 4px 4px; padding: 0;">
-            <div style="width: 38%; padding: 4px 8px; border-right: 1px solid #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; color: #2563eb; display: flex; align-items: center;">
-                LATITUDE / LONGITUDE
-            </div>
-            <div style="width: 62%; padding: 0;">
-    """, unsafe_allow_html=True)
-    st.code(f"{lat},{lon}" if lat and lon else "", language="text")
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    # O código st.code é "puxado" para dentro da tabela através do hook CSS
+    coord_texto = f"{lat},{lon}" if lat and lon else " "
+    st.code(coord_texto, language="text")
     
-    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
+    st.markdown('<div class="eh-yellow" style="margin-top: 15px; margin-bottom: 0px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
     
     def criar_linha_input(label, widget_type, key, options=None):
         cA, cB = st.columns([1, 2.5], gap="small")
