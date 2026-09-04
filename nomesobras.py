@@ -113,7 +113,7 @@ def carregar_dados(file_path, mtime):
     if not df_dados.empty:
         df_dados.columns = df_dados.columns.str.strip().str.upper()
     
-    return pd.DataFrame(), df_notas, df_dados # Retornando DF vazio para SISCO, pois não é mais usado
+    return pd.DataFrame(), df_notas, df_dados
 
 # ==========================================
 # 2. LOGO NO TOPO E DADOS PADRÃO
@@ -185,7 +185,6 @@ with c1:
     if sols_input and sols_input.strip():
         parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
         
-        # === NOVO: QUADRO LIST/SISCO GERADO AUTOMATICAMENTE ===
         if parts:
             st.markdown('<div style="font-size: 11px; font-weight: 700; color: #0284c7; margin-top: -5px; margin-bottom: 2px;">📋 LIST/SISCO (Copie no botão acima à direita):</div>', unsafe_allow_html=True)
             st.code("; ".join(parts), language="text")
@@ -308,7 +307,6 @@ if solicitacoes and not df_notas.empty:
         reg_raw = str(r_notas.get('REGIONAL', '')).upper()
         if reg_raw.lower() == 'NAN': reg_raw = ""
         
-        # Leitura Direta Exclusiva com Função Blindada
         obs = buscar_info(r_notas, ['INFORMACOES'])
         obs_extra = buscar_info(r_notas, ['INFORMACOESEXTRAS'])
         
@@ -334,14 +332,21 @@ with c2:
         <tr><td class="lbl">Levantador</td><td class="val">{levantador}</td></tr>
         <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
         <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
-        <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LATITUDE / LONGITUDE</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
     </table>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div style="font-size: 11px; font-weight: 700; color: #0284c7; margin-top: -10px; margin-bottom: 2px;">📋 COPIAR COORDENADAS:</div>', unsafe_allow_html=True)
-    st.code(f"{lat},{lon}", language="text")
+    # Campo de Código para Copiar com o Label perfeitamente alinhado na tabela
+    st.markdown("""
+        <div style="display: flex; align-items: stretch; border: 1px solid #e2e8f0; border-top: none; background-color: #f0fdf4; margin-top: -15px; margin-bottom: 15px; border-radius: 0 0 4px 4px; padding: 0;">
+            <div style="width: 38%; padding: 4px 8px; border-right: 1px solid #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; color: #2563eb; display: flex; align-items: center;">
+                LATITUDE / LONGITUDE
+            </div>
+            <div style="width: 62%; padding: 0;">
+    """, unsafe_allow_html=True)
+    st.code(f"{lat},{lon}" if lat and lon else "", language="text")
+    st.markdown("</div></div>", unsafe_allow_html=True)
     
-    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px; margin-top: 10px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
+    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
     
     def criar_linha_input(label, widget_type, key, options=None):
         cA, cB = st.columns([1, 2.5], gap="small")
@@ -369,7 +374,6 @@ with c2:
 # ==========================================
 pi_ativo = man_pi if man_pi else pi_auto
 
-# Repasses Manuais para a Tabela SGO
 if man_mun:
     cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
 if man_livre:
