@@ -215,8 +215,12 @@ with c1:
             
         pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
         aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
-        
-        if aplicar_regra_tr:
+
+        # A priorização da obra trifásica só deve ocorrer quando
+        # a opção NOTAS ASSOCIADAS estiver marcada.
+        # Com a opção desmarcada, preserva exatamente a ordem
+        # em que as solicitações foram coladas pelo usuário.
+        if notas_associadas and aplicar_regra_tr:
             tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
             outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
             
