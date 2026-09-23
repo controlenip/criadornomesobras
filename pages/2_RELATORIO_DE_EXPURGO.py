@@ -232,20 +232,20 @@ html_doc = r'''<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Calibri,Arial,sans-serif;color:#000}
-.actions{position:fixed;top:72px;left:calc(50% + 420px);right:auto;transform:none;z-index:9999;width:156px;padding:9px;display:flex;flex-direction:column;align-items:stretch;gap:8px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.98);border:1px solid #d8e0e8;border-radius:7px;box-shadow:0 2px 9px rgba(0,0,0,.14)}
-.action-btn,.photo-btn{border:0;border-radius:4px;width:100%;min-width:0;height:38px;padding:0 10px;font-size:8.2pt;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap;overflow:hidden;text-overflow:clip;line-height:1}
+.actions{position:fixed;top:72px;left:calc(50% + 365px);right:auto;transform:none;z-index:9999;width:168px;padding:9px;display:flex;flex-direction:column;align-items:stretch;gap:8px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.98);border:1px solid #d8e0e8;border-radius:7px;box-shadow:0 2px 9px rgba(0,0,0,.14)}
+.action-btn,.photo-btn{border:0;border-radius:4px;width:100%;min-width:0;height:40px;padding:0 12px;font-size:8.5pt;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap;overflow:hidden;text-overflow:clip;line-height:1}
 .action-btn:hover,.photo-btn:hover{filter:brightness(.94)}
 .excel-btn{background:#217346}.pdf-btn{background:#B42318}.clear-btn{background:#F79646}.photo-btn{background:#24465F}.photo-btn input{display:none}
 .print-stage{padding-top:0;padding-right:0}
 @media (max-width:1080px){.actions{left:auto;right:8px;width:150px}.sheet-canvas{margin-left:8px;margin-right:auto}}
-.sheet-canvas{width:801px;min-height:1190px;margin:0 auto;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sheet-canvas{width:801px;min-height:1190px;margin:0 auto;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(.88);transform-origin:top center}
 .top-space,.bottom-space{height:12.75pt}
 .report-table{width:762px;margin-left:20px;border-collapse:collapse;table-layout:fixed;font-family:Calibri,Arial,sans-serif;color:#000}
 .report-table td{padding:0;vertical-align:middle;overflow:hidden}
 .top-bg,.top-logo,.top-title{background:#17375E;color:#fff;border:0}
-.top-logo{position:relative;text-align:center!important;vertical-align:middle!important;border-right:2.25pt solid #fff;height:51pt}
-.top-logo img{max-width:142px;max-height:42px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0;vertical-align:middle}
-.top-title{text-align:center!important;vertical-align:middle!important;font-size:18pt;font-weight:700;line-height:1.05;white-space:nowrap;height:51pt;padding:0!important}
+.top-logo{position:relative;text-align:center;vertical-align:middle;border-right:2.25pt solid #fff}
+.top-logo img{width:142px;height:48px;object-fit:contain;display:block;margin:0 auto}
+.top-title{text-align:center;vertical-align:middle;font-size:18pt;font-weight:700;line-height:1;white-space:nowrap}
 .blank-row td{border:0!important;background:#fff}
 .section-label,.section-fill{background:#24465F;color:#fff;border-top:1px solid #24465F;border-bottom:1px solid #24465F;font-size:10pt;font-weight:700}
 .section-label{border-left:1px solid #24465F;text-align:center}.section-fill{border-right:1px solid #24465F}
@@ -335,8 +335,10 @@ html_doc = r'''<!doctype html>
 let FOTOS_ATUAIS=[];
 const LOGO_B64="__LOGO__";
 function valorCampo(id){const el=document.getElementById(id);return el?((el.value||"").toString().trim()):""}
+function limparNomeArquivo(valor){return (valor||"").toString().replace(/[\\/:*?"<>|]/g," ").replace(/\s+/g," ").replace(/[. ]+$/g,"").trim()}
+function nomeArquivoBase(){const nota=limparNomeArquivo(chaveNota(valorCampo("nota"))||"SEM_NOTA");const cliente=limparNomeArquivo(valorCampo("parceiro")||"SEM_CLIENTE");return `${nota} - ${cliente}`}
 function baixarBlob(blob,nome){const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
-function exportarPDF(){window.print()}
+function exportarPDF(){const tituloAnterior=document.title;document.title=nomeArquivoBase();const restaurar=()=>{document.title=tituloAnterior};window.addEventListener("afterprint",restaurar,{once:true});window.print()}
 function excelColPos(frac){const widths=[17.5703125,11.85546875,13.42578125,13.28515625,11,20,10.85546875,10.85546875];const total=widths.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<widths.length;i++){if(alvo<=widths[i])return 1+i+(alvo/widths[i]);alvo-=widths[i]}return 9}
 function excelRowPos(frac){const heights=[12.95,15,15,15,15,15,15,15,15,15,15,15,15,15,15,30.75,27];const total=heights.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<heights.length;i++){if(alvo<=heights[i])return 37+i+(alvo/heights[i]);alvo-=heights[i]}return 54}
 async function exportarExcel(){
@@ -370,7 +372,7 @@ async function exportarExcel(){
   const grade=[[0,0,1,1],[0,0,.5,1],[.5,0,1,1],[0,0,1/3,1],[1/3,0,2/3,1],[2/3,0,1,1],[0,0,.5,.5],[.5,0,1,.5],[0,.5,.5,1],[.5,.5,1,1],[0,0,1/3,.5],[1/3,0,2/3,.5],[2/3,0,1,.5],[0,.5,.5,1],[.5,.5,1,1]];
   const layouts={1:[grade[0]],2:[grade[1],grade[2]],3:[grade[3],grade[4],grade[5]],4:[grade[6],grade[7],grade[8],grade[9]],5:[grade[10],grade[11],grade[12],grade[13],grade[14]]};
   if(FOTOS_ATUAIS.length){const lay=layouts[Math.min(5,FOTOS_ATUAIS.length)]||[];for(let i=0;i<Math.min(5,FOTOS_ATUAIS.length);i++){const url=FOTOS_ATUAIS[i];const ext=url.startsWith("data:image/png")?"png":"jpeg";try{const id=wb.addImage({base64:url,extension:ext});const [x1,y1,x2,y2]=lay[i];ws.addImage(id,{tl:{col:excelColPos(x1),row:excelRowPos(y1)},br:{col:excelColPos(x2),row:excelRowPos(y2)},editAs:"oneCell"})}catch(e){}}}
-  const buf=await wb.xlsx.writeBuffer();const nome=(chaveNota(valorCampo("nota"))||"SEM_NOTA").replace(/[^A-Z0-9_-]/g,"_");baixarBlob(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),`Relatorio_Expurgo_${nome}.xlsx`)
+  const buf=await wb.xlsx.writeBuffer();baixarBlob(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),`${nomeArquivoBase()}.xlsx`)
 }
 const BASE_NOTAS=__BASE_JSON__;
 const TRATATIVAS={"ATENDIMENTO EM TERRENO DE TERCEIROS": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE ATENDIDO POR OUTRA ÁREA": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE ATENDIDO POR OUTRA SOLICITAÇÃO (EXPANSÃO)": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE CONSTRUIU A PRÓPRIA REDE SEM APRESENTAR PROJETO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE DESISTIU DO SERVIÇO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE DOMÍNIO PÚBLICO/LITÍGIO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE LOTEAMENTO PARTICULAR/ CONDOMÍNIO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE PRESERVAÇÃO AMBIENTAL": "SUSPENSÃO", "CLIENTE EMUC": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE LIGADO A REVELIA (CLANDESTINO)": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE NÃO LOCALIZADO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE URBANO SE ARRUAMENTO": "REJEIÇÃO PARA CANCELAMENTO", "ERRO NA ABERTURA - CLIENTE DESEJA OUTRO SERVIÇO": "REJEIÇÃO PARA CANCELAMENTO", "JÁ EXISTE REDE DE BT PARA ATENDER O CLIENTE": "DEVOLVER A GSTC", "OBSTACULO IMPEDE EXECUÇÃO/ SEM ACESSO": "SUSPENSÃO", "PADRÃO INCORRETO": "DEVOLVER A GSTC", "PADRÃO INEXISTENTE": "DEVOLVER A GSTC", "PADRÃO TRIFÁSICO INEXISTENTE": "DEVOLVER A GSTC", "PEDIDO EM DUPLICIDADE": "REJEIÇÃO PARA CANCELAMENTO", "RECLASSIFICAÇÃO RR PARA UB": "INFORMAR PARA AJUSTE NO INDICADOR", "RECLASSIFICAÇÃO UB PARA RR": "INFORMAR PARA AJUSTE NO INDICADOR", "SEM ACESSO PERIODO CHUVOSO": "SUSPENSÃO", "SOMENTE O TERRENO": "REJEIÇÃO PARA CANCELAMENTO", "UC DEMOLIDA/ ABANDONADA": "REJEIÇÃO PARA CANCELAMENTO", "CUSTEIO": "REJEIÇÃO PARA CANCELAMENTO"};
