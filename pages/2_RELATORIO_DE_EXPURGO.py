@@ -232,11 +232,12 @@ html_doc = r'''<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Calibri,Arial,sans-serif;color:#000}
-.actions{position:fixed;top:72px;right:10px;left:auto;transform:none;z-index:9999;width:122px;padding:8px;display:flex;flex-direction:column;align-items:stretch;gap:8px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.97);border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
-.action-btn,.photo-btn{border:0;border-radius:4px;width:100%;min-width:0;height:34px;padding:0 6px;font-size:8.4pt;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap}
+.actions{position:fixed;top:72px;left:calc(50% + 420px);right:auto;transform:none;z-index:9999;width:156px;padding:9px;display:flex;flex-direction:column;align-items:stretch;gap:8px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.98);border:1px solid #d8e0e8;border-radius:7px;box-shadow:0 2px 9px rgba(0,0,0,.14)}
+.action-btn,.photo-btn{border:0;border-radius:4px;width:100%;min-width:0;height:38px;padding:0 10px;font-size:8.2pt;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap;overflow:hidden;text-overflow:clip;line-height:1}
 .action-btn:hover,.photo-btn:hover{filter:brightness(.94)}
 .excel-btn{background:#217346}.pdf-btn{background:#B42318}.clear-btn{background:#F79646}.photo-btn{background:#24465F}.photo-btn input{display:none}
-.print-stage{padding-top:0;padding-right:140px}
+.print-stage{padding-top:0;padding-right:0}
+@media (max-width:1080px){.actions{left:auto;right:8px;width:150px}.sheet-canvas{margin-left:8px;margin-right:auto}}
 .sheet-canvas{width:801px;min-height:1190px;margin:0 auto;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .top-space,.bottom-space{height:12.75pt}
 .report-table{width:762px;margin-left:20px;border-collapse:collapse;table-layout:fixed;font-family:Calibri,Arial,sans-serif;color:#000}
