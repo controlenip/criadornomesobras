@@ -229,6 +229,7 @@ html_doc = r'''<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<title>Relatório de Expurgo</title>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Calibri,Arial,sans-serif;color:#000}
@@ -338,7 +339,50 @@ function valorCampo(id){const el=document.getElementById(id);return el?((el.valu
 function limparNomeArquivo(valor){return (valor||"").toString().replace(/[\\/:*?"<>|]/g," ").replace(/\s+/g," ").replace(/[. ]+$/g,"").trim()}
 function nomeArquivoBase(){const nota=limparNomeArquivo(chaveNota(valorCampo("nota"))||"SEM_NOTA");const cliente=limparNomeArquivo(valorCampo("parceiro")||"SEM_CLIENTE");return `${nota} - ${cliente}`}
 function baixarBlob(blob,nome){const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
-function exportarPDF(){const tituloAnterior=document.title;document.title=nomeArquivoBase();const restaurar=()=>{document.title=tituloAnterior};window.addEventListener("afterprint",restaurar,{once:true});window.print()}
+function escaparHtml(valor){return (valor||"").toString().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;")}
+function cloneRelatorioParaImpressao(){
+  const original=document.querySelector(".sheet-canvas");
+  const clone=original.cloneNode(true);
+  const camposOrig=original.querySelectorAll("input,select,textarea");
+  const camposClone=clone.querySelectorAll("input,select,textarea");
+  camposOrig.forEach((orig,i)=>{
+    const c=camposClone[i];if(!c)return;
+    if(orig.tagName==="SELECT"){
+      Array.from(c.options).forEach((op,j)=>{if(j===orig.selectedIndex)op.setAttribute("selected","selected");else op.removeAttribute("selected")});
+    }else if(orig.tagName==="TEXTAREA"){
+      c.textContent=orig.value||"";
+    }else{
+      c.setAttribute("value",orig.value||"");
+    }
+  });
+  return clone.outerHTML;
+}
+function exportarPDF(){
+  const nome=nomeArquivoBase();
+  const janela=window.open("","_blank");
+  if(!janela){
+    alert("O navegador bloqueou a janela de exportação. Permita pop-ups para este site e tente novamente.");
+    return;
+  }
+  const estilos=Array.from(document.querySelectorAll("style")).map(s=>s.textContent).join("\n");
+  const relatorio=cloneRelatorioParaImpressao();
+  janela.document.open();
+  janela.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escaparHtml(nome)}</title><style>${estilos}</style><style>
+    html,body{margin:0!important;padding:0!important;background:#fff!important;width:210mm;min-height:297mm;overflow:visible!important}
+    .actions{display:none!important}
+    .print-stage{width:210mm;height:297mm;padding:0!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
+    .sheet-canvas{margin:0!important;transform:scale(.88)!important;transform-origin:center center!important;flex:0 0 auto!important}
+    @media print{@page{size:A4 portrait;margin:0}.print-stage{width:210mm!important;height:297mm!important}.sheet-canvas{transform:scale(.88)!important;transform-origin:center center!important}}
+  </style></head><body><div class="print-stage">${relatorio}</div></body></html>`);
+  janela.document.close();
+  janela.document.title=nome;
+  const disparar=()=>{
+    janela.document.title=nome;
+    janela.focus();
+    setTimeout(()=>janela.print(),250);
+  };
+  if(janela.document.readyState==="complete")setTimeout(disparar,350);else janela.addEventListener("load",()=>setTimeout(disparar,350),{once:true});
+}
 function excelColPos(frac){const widths=[17.5703125,11.85546875,13.42578125,13.28515625,11,20,10.85546875,10.85546875];const total=widths.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<widths.length;i++){if(alvo<=widths[i])return 1+i+(alvo/widths[i]);alvo-=widths[i]}return 9}
 function excelRowPos(frac){const heights=[12.95,15,15,15,15,15,15,15,15,15,15,15,15,15,15,30.75,27];const total=heights.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<heights.length;i++){if(alvo<=heights[i])return 37+i+(alvo/heights[i]);alvo-=heights[i]}return 54}
 async function exportarExcel(){
