@@ -174,7 +174,7 @@ with c1:
     st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
     
     st.markdown("<div style='padding: 8px 0px;'>", unsafe_allow_html=True)
-    notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
+    notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True, key="chk_notas_associadas")
     st.markdown("</div>", unsafe_allow_html=True)
     
     sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
@@ -213,25 +213,26 @@ with c1:
                 if pi_sol.lower() == 'nan': pi_sol = ""
                 notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
             
+        # ==========================================================
+        # REGRA DE ORDEM DAS SOLICITAÇÕES
+        # ==========================================================
+        # Esta lista é a fonte oficial da ordem digitada/colada pelo usuário.
+        # Ela é criada UMA ÚNICA VEZ e nunca é alterada.
+        ordem_colada = [n['sol'] for n in notas_processadas]
+
         pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
         aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
 
-        # A priorização da obra trifásica só deve ocorrer quando
-        # a opção NOTAS ASSOCIADAS estiver marcada.
-        # Com a opção desmarcada, preserva exatamente a ordem
-        # em que as solicitações foram coladas pelo usuário.
         if notas_associadas and aplicar_regra_tr:
-            tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
-            outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
-            
-            if tr_notes:
-                escolhida_tr = random.choice(tr_notes)
-                tr_notes.remove(escolhida_tr)
-                solicitacoes = [escolhida_tr] + tr_notes + outras_notes
-            else:
-                solicitacoes = [n['sol'] for n in notas_processadas]
+            # Marcada: coloca as trifásicas primeiro, preservando a ordem
+            # relativa em que elas próprias foram coladas.
+            trifasicas = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
+            demais = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
+            solicitacoes = trifasicas + demais if trifasicas else ordem_colada.copy()
         else:
-            solicitacoes = [n['sol'] for n in notas_processadas]
+            # Desmarcada: usa EXATAMENTE a ordem colada, sem qualquer
+            # priorização por fase, PI ou outro critério.
+            solicitacoes = ordem_colada.copy()
             
     if notas_removidas:
         st.markdown('<div class="eh-yellow" style="margin-top: 15px; background-color: #fef2f2; color: #991b1b; border-color: #fca5a5;">⚠️ OBRAS CANCELADAS / FINALIZADAS</div>', unsafe_allow_html=True)
