@@ -216,7 +216,7 @@ with c1:
         pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
         aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
         
-        if aplicar_regra_tr:
+        if notas_associadas and aplicar_regra_tr:
             tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
             outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
             
