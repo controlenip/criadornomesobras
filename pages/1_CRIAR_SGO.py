@@ -74,6 +74,8 @@ def limpar_campos_manuais():
         st.session_state["text_area_obras"] = ""
     if "notas_vu" in st.session_state:
         st.session_state["notas_vu"] = False
+    if "utilizar_notas_canc_finl" in st.session_state:
+        st.session_state["utilizar_notas_canc_finl"] = False
 
 def remover_acentos(texto):
     if pd.isna(texto) or texto == "": return ""
@@ -193,6 +195,7 @@ with c1:
     st.markdown("<div style='padding: 8px 0px;'>", unsafe_allow_html=True)
     notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
     notas_vu = st.checkbox("NOTAS VU (VISITA ÚNICA)", value=False, key="notas_vu")
+    utilizar_notas_canc_finl = st.checkbox("UTILIZAR NOTAS CANC/FINL", value=False, key="utilizar_notas_canc_finl")
     st.markdown("</div>", unsafe_allow_html=True)
     
     sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
@@ -225,10 +228,15 @@ with c1:
 
             if not fase_sol: fase_sol = "MO"
             
-            if status_sap_temp in ['CANC', 'FINL']:
+            if pi_sol.lower() == 'nan':
+                pi_sol = ""
+
+            # Por padrão, notas CANC/FINL continuam sendo removidas como antes.
+            # Quando UTILIZAR NOTAS CANC/FINL estiver marcada, elas entram normalmente
+            # em toda a lógica da ferramenta, inclusive ordem, dados, descrições e nomes.
+            if status_sap_temp in ['CANC', 'FINL'] and not utilizar_notas_canc_finl:
                 notas_removidas.append(f"❌ {sol} ({status_sap_temp})")
             else:
-                if pi_sol.lower() == 'nan': pi_sol = ""
                 notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
             
         pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
@@ -481,8 +489,8 @@ def aplicar_marcacao_vu(nome_obra, solicitacao):
 
 
 def limitar_nome_obra(nome_obra):
-    """Limita qualquer item exibido em NOMES DAS OBRAS a no máximo 41 caracteres."""
-    return str(nome_obra)[:41] if nome_obra else ""
+    """Limita qualquer item exibido em NOMES DAS OBRAS a no máximo 40 caracteres."""
+    return str(nome_obra)[:40] if nome_obra else ""
 
 pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
 pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
@@ -504,7 +512,7 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
     
     descricoes_list.append(desc_str)
-    # NOMES DAS OBRAS usa o nome completo, aplica VU quando marcado e só então limita a 41 caracteres.
+    # NOMES DAS OBRAS usa o nome completo, aplica VU quando marcado e só então limita a 40 caracteres.
     nome_lista_manual = aplicar_marcacao_vu(clean_name.upper(), val_sol_final)
     nomes_obras_list.append(limitar_nome_obra(nome_lista_manual))
 else:
@@ -563,7 +571,7 @@ else:
         if notas_associadas and idx > 0:
             pass 
         else:
-            # O quadro NOMES DAS OBRAS pode ter até 41 caracteres, contando letras,
+            # O quadro NOMES DAS OBRAS pode ter até 40 caracteres, contando letras,
             # números, hífens, VU e qualquer outro caractere.
             if not res_sol_notas.empty:
                 nome_base_lista = clean_name.upper()
@@ -626,7 +634,7 @@ with c4:
 
     if nomes_obras_list:
         contagens_html = " &nbsp;•&nbsp; ".join(
-            f'{idx + 1}: {len(str(nome))}/41'
+            f'{idx + 1}: {len(str(nome))}/40'
             for idx, nome in enumerate(nomes_obras_list)
         )
         st.markdown(
