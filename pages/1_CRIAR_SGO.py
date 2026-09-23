@@ -464,6 +464,11 @@ def aplicar_marcacao_vu(nome_obra, solicitacao):
 
     return nome_obra
 
+
+def limitar_nome_obra(nome_obra):
+    """Limita qualquer item exibido em NOMES DAS OBRAS a no máximo 41 caracteres."""
+    return str(nome_obra)[:41] if nome_obra else ""
+
 pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
 pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
@@ -484,8 +489,9 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
     
     descricoes_list.append(desc_str)
-    nome_lista_manual = aplicar_marcacao_vu(obra_relampago_formatada, val_sol_final)
-    nomes_obras_list.append(nome_lista_manual)
+    # NOMES DAS OBRAS usa o nome completo, aplica VU quando marcado e só então limita a 41 caracteres.
+    nome_lista_manual = aplicar_marcacao_vu(clean_name.upper(), val_sol_final)
+    nomes_obras_list.append(limitar_nome_obra(nome_lista_manual))
 else:
     for idx, sol in enumerate(solicitacoes):
         res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
@@ -542,8 +548,14 @@ else:
         if notas_associadas and idx > 0:
             pass 
         else:
-            nome_para_lista = aplicar_marcacao_vu(nome_str, sol)
-            nomes_obras_list.append(nome_para_lista)
+            # O quadro NOMES DAS OBRAS pode ter até 41 caracteres, contando letras,
+            # números, hífens, VU e qualquer outro caractere.
+            if not res_sol_notas.empty:
+                nome_base_lista = clean_name.upper()
+            else:
+                nome_base_lista = nome_str
+            nome_para_lista = aplicar_marcacao_vu(nome_base_lista, sol)
+            nomes_obras_list.append(limitar_nome_obra(nome_para_lista))
 
 # ==========================================
 # 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
