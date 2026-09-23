@@ -231,12 +231,15 @@ html_doc = r'''<!doctype html>
 <meta charset="utf-8">
 <title>Relatório de Expurgo</title>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Calibri,Arial,sans-serif;color:#000}
 .actions{position:fixed;top:72px;left:calc(50% + 365px);right:auto;transform:none;z-index:9999;width:168px;padding:9px;display:flex;flex-direction:column;align-items:stretch;gap:8px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.98);border:1px solid #d8e0e8;border-radius:7px;box-shadow:0 2px 9px rgba(0,0,0,.14)}
 .action-btn,.photo-btn{border:0;border-radius:4px;width:100%;min-width:0;height:40px;padding:0 12px;font-size:8.5pt;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap;overflow:hidden;text-overflow:clip;line-height:1}
 .action-btn:hover,.photo-btn:hover{filter:brightness(.94)}
-.excel-btn{background:#217346}.pdf-btn{background:#B42318}.clear-btn{background:#F79646}.photo-btn{background:#24465F}.photo-btn input{display:none}
+.zip-btn{background:#217346}.clear-btn{background:#F79646}.photo-btn{background:#24465F}.photo-btn input{display:none}
 .print-stage{padding-top:0;padding-right:0}
 @media (max-width:1080px){.actions{left:auto;right:8px;width:150px}.sheet-canvas{margin-left:8px;margin-right:auto}}
 .sheet-canvas{width:801px;min-height:1190px;margin:0 auto;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:scale(.88);transform-origin:top center}
@@ -273,6 +276,7 @@ html_doc = r'''<!doctype html>
 .evidence-grid.photos-5 .evidence-item:nth-child(-n+3){grid-column:span 2}
 .evidence-grid.photos-5 .evidence-item:nth-child(n+4){grid-column:span 3}
 .photo-count{font-size:8pt;font-weight:700;margin-left:4px;opacity:.9}
+.export-clone{transform:none!important;margin:0!important}.export-clone .select-cell::after{display:none!important}.export-clone .fi:focus,.export-clone .fs:focus{outline:none!important}.export-clone .fs{appearance:none!important;-webkit-appearance:none!important;padding-right:4px!important}.export-clone .evidence-placeholder{display:none!important}
 @media print{
  @page{size:A4 portrait;margin:0}
  html,body{width:210mm;height:297mm;margin:0!important;padding:0!important;overflow:hidden}
@@ -286,8 +290,7 @@ html_doc = r'''<!doctype html>
 <body>
 <div class="actions">
 <label class="photo-btn" title="Adicionar até 5 fotos à área de evidências">FOTOS 📷 <span id="photoCount" class="photo-count">0/5</span><input id="photoInput" type="file" accept="image/png,image/jpeg" multiple></label>
-<button class="action-btn excel-btn" type="button" onclick="exportarExcel()" title="Baixar o relatório preenchido em Excel">EXPORTAR EXCEL 📊</button>
-<button class="action-btn pdf-btn" type="button" onclick="exportarPDF()" title="Imprimir ou salvar o relatório preenchido em PDF">EXPORTAR PDF 📄</button>
+<button id="anexosBtn" class="action-btn zip-btn" type="button" onclick="exportarAnexos()" title="Baixar Excel e PDF juntos em uma pasta ZIP">ANEXOS 📎</button>
 <button class="action-btn clear-btn" type="button" onclick="limparTudo()" title="Limpar todos os dados e fotos">LIMPAR 🧹</button>
 </div>
 <div class="print-stage"><div class="sheet-canvas">
@@ -357,35 +360,43 @@ function cloneRelatorioParaImpressao(){
   });
   return clone.outerHTML;
 }
-function exportarPDF(){
-  const nome=nomeArquivoBase();
-  const janela=window.open("","_blank");
-  if(!janela){
-    alert("O navegador bloqueou a janela de exportação. Permita pop-ups para este site e tente novamente.");
-    return;
+async function gerarPDFBlob(){
+  if(typeof html2canvas==="undefined"||!window.jspdf||!window.jspdf.jsPDF){
+    throw new Error("Não foi possível carregar o módulo de PDF. Verifique a conexão com a internet.");
   }
-  const estilos=Array.from(document.querySelectorAll("style")).map(s=>s.textContent).join("\n");
-  const relatorio=cloneRelatorioParaImpressao();
-  janela.document.open();
-  janela.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escaparHtml(nome)}</title><style>${estilos}</style><style>
-    html,body{margin:0!important;padding:0!important;background:#fff!important;width:210mm;min-height:297mm;overflow:visible!important}
-    .actions{display:none!important}
-    .print-stage{width:210mm;height:297mm;padding:0!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
-    .sheet-canvas{margin:0!important;transform:scale(.88)!important;transform-origin:center center!important;flex:0 0 auto!important}
-    @media print{@page{size:A4 portrait;margin:0}.print-stage{width:210mm!important;height:297mm!important}.sheet-canvas{transform:scale(.88)!important;transform-origin:center center!important}}
-  </style></head><body><div class="print-stage">${relatorio}</div></body></html>`);
-  janela.document.close();
-  janela.document.title=nome;
-  const disparar=()=>{
-    janela.document.title=nome;
-    janela.focus();
-    setTimeout(()=>janela.print(),250);
-  };
-  if(janela.document.readyState==="complete")setTimeout(disparar,350);else janela.addEventListener("load",()=>setTimeout(disparar,350),{once:true});
+  const original=document.querySelector(".sheet-canvas");
+  const clone=original.cloneNode(true);
+  clone.classList.add("export-clone");
+  const camposOrig=original.querySelectorAll("input,select,textarea");
+  const camposClone=clone.querySelectorAll("input,select,textarea");
+  camposOrig.forEach((orig,i)=>{
+    const c=camposClone[i];if(!c)return;
+    if(orig.tagName==="SELECT"){c.value=orig.value;}
+    else{c.value=orig.value||"";c.setAttribute("value",orig.value||"");}
+  });
+  const suporte=document.createElement("div");
+  suporte.style.position="fixed";suporte.style.left="-10000px";suporte.style.top="0";
+  suporte.style.width="801px";suporte.style.height="1190px";suporte.style.background="#fff";
+  suporte.style.zIndex="-1";suporte.style.overflow="hidden";
+  suporte.appendChild(clone);document.body.appendChild(suporte);
+  try{
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const canvas=await html2canvas(clone,{scale:2,backgroundColor:"#ffffff",useCORS:true,allowTaint:true,logging:false,width:801,height:1190,windowWidth:801,windowHeight:1190});
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
+    const pageW=210,pageH=297;
+    const proporcao=Math.min(pageW/canvas.width,pageH/canvas.height);
+    const w=canvas.width*proporcao,h=canvas.height*proporcao;
+    const x=(pageW-w)/2,y=(pageH-h)/2;
+    pdf.addImage(canvas.toDataURL("image/jpeg",0.95),"JPEG",x,y,w,h,undefined,"FAST");
+    return pdf.output("blob");
+  }finally{
+    suporte.remove();
+  }
 }
 function excelColPos(frac){const widths=[17.5703125,11.85546875,13.42578125,13.28515625,11,20,10.85546875,10.85546875];const total=widths.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<widths.length;i++){if(alvo<=widths[i])return 1+i+(alvo/widths[i]);alvo-=widths[i]}return 9}
 function excelRowPos(frac){const heights=[12.95,15,15,15,15,15,15,15,15,15,15,15,15,15,15,30.75,27];const total=heights.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<heights.length;i++){if(alvo<=heights[i])return 37+i+(alvo/heights[i]);alvo-=heights[i]}return 54}
-async function exportarExcel(){
+async function gerarExcelBlob(){
   if(typeof ExcelJS==="undefined"){alert("Não foi possível carregar o módulo de exportação Excel. Verifique a conexão com a internet e tente novamente.");return}
   const wb=new ExcelJS.Workbook();wb.creator="NIP";wb.created=new Date();
   const ws=wb.addWorksheet("Modelo",{pageSetup:{paperSize:9,orientation:"portrait",fitToPage:false,scale:88,horizontalCentered:true,verticalCentered:true,margins:{left:0,right:0,top:0,bottom:0,header:0,footer:0}}});
@@ -416,7 +427,28 @@ async function exportarExcel(){
   const grade=[[0,0,1,1],[0,0,.5,1],[.5,0,1,1],[0,0,1/3,1],[1/3,0,2/3,1],[2/3,0,1,1],[0,0,.5,.5],[.5,0,1,.5],[0,.5,.5,1],[.5,.5,1,1],[0,0,1/3,.5],[1/3,0,2/3,.5],[2/3,0,1,.5],[0,.5,.5,1],[.5,.5,1,1]];
   const layouts={1:[grade[0]],2:[grade[1],grade[2]],3:[grade[3],grade[4],grade[5]],4:[grade[6],grade[7],grade[8],grade[9]],5:[grade[10],grade[11],grade[12],grade[13],grade[14]]};
   if(FOTOS_ATUAIS.length){const lay=layouts[Math.min(5,FOTOS_ATUAIS.length)]||[];for(let i=0;i<Math.min(5,FOTOS_ATUAIS.length);i++){const url=FOTOS_ATUAIS[i];const ext=url.startsWith("data:image/png")?"png":"jpeg";try{const id=wb.addImage({base64:url,extension:ext});const [x1,y1,x2,y2]=lay[i];ws.addImage(id,{tl:{col:excelColPos(x1),row:excelRowPos(y1)},br:{col:excelColPos(x2),row:excelRowPos(y2)},editAs:"oneCell"})}catch(e){}}}
-  const buf=await wb.xlsx.writeBuffer();baixarBlob(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),`${nomeArquivoBase()}.xlsx`)
+  const buf=await wb.xlsx.writeBuffer();
+  return new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+async function exportarAnexos(){
+  const botao=document.getElementById("anexosBtn");
+  const textoOriginal=botao?botao.textContent:"ANEXOS 📎";
+  try{
+    if(typeof JSZip==="undefined")throw new Error("Não foi possível carregar o módulo de compactação ZIP. Verifique a conexão com a internet.");
+    if(botao){botao.disabled=true;botao.textContent="GERANDO...";}
+    const nome=nomeArquivoBase();
+    const excelBlob=await gerarExcelBlob();
+    const pdfBlob=await gerarPDFBlob();
+    const zip=new JSZip();
+    zip.file(`${nome}.xlsx`,excelBlob);
+    zip.file(`${nome}.pdf`,pdfBlob);
+    const zipBlob=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});
+    baixarBlob(zipBlob,`${nome}.zip`);
+  }catch(e){
+    console.error(e);alert(e&&e.message?e.message:"Não foi possível gerar os anexos.");
+  }finally{
+    if(botao){botao.disabled=false;botao.textContent=textoOriginal;}
+  }
 }
 const BASE_NOTAS=__BASE_JSON__;
 const TRATATIVAS={"ATENDIMENTO EM TERRENO DE TERCEIROS": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE ATENDIDO POR OUTRA ÁREA": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE ATENDIDO POR OUTRA SOLICITAÇÃO (EXPANSÃO)": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE CONSTRUIU A PRÓPRIA REDE SEM APRESENTAR PROJETO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE DESISTIU DO SERVIÇO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE DOMÍNIO PÚBLICO/LITÍGIO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE LOTEAMENTO PARTICULAR/ CONDOMÍNIO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE PRESERVAÇÃO AMBIENTAL": "SUSPENSÃO", "CLIENTE EMUC": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE LIGADO A REVELIA (CLANDESTINO)": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE NÃO LOCALIZADO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE URBANO SE ARRUAMENTO": "REJEIÇÃO PARA CANCELAMENTO", "ERRO NA ABERTURA - CLIENTE DESEJA OUTRO SERVIÇO": "REJEIÇÃO PARA CANCELAMENTO", "JÁ EXISTE REDE DE BT PARA ATENDER O CLIENTE": "DEVOLVER A GSTC", "OBSTACULO IMPEDE EXECUÇÃO/ SEM ACESSO": "SUSPENSÃO", "PADRÃO INCORRETO": "DEVOLVER A GSTC", "PADRÃO INEXISTENTE": "DEVOLVER A GSTC", "PADRÃO TRIFÁSICO INEXISTENTE": "DEVOLVER A GSTC", "PEDIDO EM DUPLICIDADE": "REJEIÇÃO PARA CANCELAMENTO", "RECLASSIFICAÇÃO RR PARA UB": "INFORMAR PARA AJUSTE NO INDICADOR", "RECLASSIFICAÇÃO UB PARA RR": "INFORMAR PARA AJUSTE NO INDICADOR", "SEM ACESSO PERIODO CHUVOSO": "SUSPENSÃO", "SOMENTE O TERRENO": "REJEIÇÃO PARA CANCELAMENTO", "UC DEMOLIDA/ ABANDONADA": "REJEIÇÃO PARA CANCELAMENTO", "CUSTEIO": "REJEIÇÃO PARA CANCELAMENTO"};
