@@ -263,7 +263,7 @@ html_doc = r'''<!doctype html>
 .select-cell::after{content:"▾";position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:6.5pt;line-height:1;color:#64748b;opacity:.16;pointer-events:none;transition:opacity .15s ease}
 .select-cell:hover::after,.select-cell:focus-within::after{opacity:.62}
 .evidence-cell{height:249.2pt!important;min-height:249.2pt!important;max-height:249.2pt!important;border:1px solid #000;background:#fff;position:relative;overflow:hidden;padding:0!important}
-.evidence-grid{width:100%;height:249.2pt!important;min-height:249.2pt!important;max-height:249.2pt!important;display:grid;gap:1px;background:#000;overflow:hidden}
+.evidence-grid{width:100%;height:249.2pt!important;min-height:249.2pt!important;max-height:249.2pt!important;display:grid;gap:1px;background:#000;overflow:hidden;outline:none;cursor:pointer}
 .evidence-grid.empty{display:flex;background:#fff;align-items:center;justify-content:center}
 .evidence-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:9pt;font-weight:600;cursor:pointer;text-align:center}
 .evidence-item{min-width:0;min-height:0;background:#fff;overflow:hidden}
@@ -331,7 +331,7 @@ html_doc = r'''<!doctype html>
 <tr class="blank-row" style="height:7.5pt"><td colspan="8"></td></tr>
 <tr style="height:25.5pt"><td class="lbl-cell lbl-wrap">Número do medidor<br>do vizinho:</td><td class="value-cell" colspan="3"><input id="medidor_vizinho" class="fi" type="text"></td><td class="spacer-cell"></td><td class="lbl-cell lbl-wrap">Número da estrutura<br>mais próxima:</td><td class="value-cell" colspan="2"><input id="estrutura_proxima" class="fi" type="text"></td></tr>
 <tr class="blank-row" style="height:9.95pt"><td colspan="8"></td></tr>
-<tr style="height:249.2pt!important"><td class="evidence-cell" colspan="8"><div id="evidenceGrid" class="evidence-grid empty"><label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos</label></div></td></tr>
+<tr style="height:249.2pt!important"><td class="evidence-cell" colspan="8"><div id="evidenceGrid" class="evidence-grid empty" tabindex="0" title="Clique neste quadro e use Ctrl+V para colar uma imagem"><label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos<br><span style="font-size:8pt;font-weight:500;">ou clique no quadro e cole uma imagem com Ctrl+V</span></label></div></td></tr>
 </table>
 <div class="bottom-space"></div>
 </div></div>
@@ -458,15 +458,50 @@ function setInput(id,valor){const el=document.getElementById(id);if(el)el.value=
 function setSelect(id,valor){const el=document.getElementById(id);if(!el)return;const v=(valor||"").toString().trim().toUpperCase();if(!v){el.value="";return}let achou=false;for(const op of el.options){if((op.value||op.text).toString().trim().toUpperCase()===v){el.value=op.value;achou=true;break}}if(!achou){const op=document.createElement("option");op.value=valor;op.textContent=valor;el.appendChild(op);el.value=valor}}
 function atualizarTratativa(preferirBase=""){const j=document.getElementById("justificativa").value||"";setInput("tratativa",preferirBase||TRATATIVAS[j]||"")}
 function atualizarContadorFotos(qtd){const c=document.getElementById("photoCount");if(c)c.textContent=`${qtd}/5`}
-function placeholderFotos(){return '<label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos</label>'}
+function placeholderFotos(){return '<label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos<br><span style="font-size:8pt;font-weight:500;">ou clique no quadro e cole uma imagem com Ctrl+V</span></label>'}
 function limparFotos(){FOTOS_ATUAIS=[];const grade=document.getElementById("evidenceGrid");grade.className="evidence-grid empty";grade.innerHTML=placeholderFotos();document.getElementById("photoInput").value="";atualizarContadorFotos(0)}
 function lerFoto(arquivo){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=e=>resolve(e.target.result);reader.onerror=reject;reader.readAsDataURL(arquivo)})}
-async function carregarFotos(fileList){const todos=Array.from(fileList||[]);if(!todos.length){limparFotos();return}if(todos.length>5){alert("Selecione no máximo 5 fotos. As 5 primeiras serão utilizadas.")}const arquivos=todos.slice(0,5);const urls=await Promise.all(arquivos.map(lerFoto));FOTOS_ATUAIS=urls.slice();const grade=document.getElementById("evidenceGrid");grade.className=`evidence-grid photos-${urls.length}`;grade.innerHTML="";urls.forEach((url,i)=>{const item=document.createElement("div");item.className="evidence-item";const img=document.createElement("img");img.src=url;img.alt=`Evidência ${i+1}`;item.appendChild(img);grade.appendChild(item)});atualizarContadorFotos(urls.length)}
+function renderizarFotos(){
+  const grade=document.getElementById("evidenceGrid");
+  const qtd=FOTOS_ATUAIS.length;
+  if(!qtd){grade.className="evidence-grid empty";grade.innerHTML=placeholderFotos();atualizarContadorFotos(0);return}
+  grade.className=`evidence-grid photos-${qtd}`;
+  grade.innerHTML="";
+  FOTOS_ATUAIS.forEach((url,i)=>{
+    const item=document.createElement("div");item.className="evidence-item";
+    const img=document.createElement("img");img.src=url;img.alt=`Evidência ${i+1}`;
+    item.appendChild(img);grade.appendChild(item)
+  });
+  atualizarContadorFotos(qtd)
+}
+async function carregarFotos(fileList){
+  const todos=Array.from(fileList||[]).filter(a=>(a.type||"").startsWith("image/"));
+  if(!todos.length){return}
+  if(todos.length>5){alert("Selecione no máximo 5 fotos. As 5 primeiras serão utilizadas.")}
+  const arquivos=todos.slice(0,5);
+  FOTOS_ATUAIS=await Promise.all(arquivos.map(lerFoto));
+  renderizarFotos()
+}
+async function colarFotosDoClipboard(evt){
+  const itens=Array.from((evt.clipboardData&&evt.clipboardData.items)||[]);
+  const arquivos=itens.filter(i=>i.kind==="file"&&(i.type||"").startsWith("image/")).map(i=>i.getAsFile()).filter(Boolean);
+  if(!arquivos.length)return;
+  evt.preventDefault();
+  const vagas=5-FOTOS_ATUAIS.length;
+  if(vagas<=0){alert("O limite de 5 fotos já foi atingido.");return}
+  if(arquivos.length>vagas){alert(`Só há espaço para mais ${vagas} foto(s). As primeiras serão adicionadas.`)}
+  const novas=await Promise.all(arquivos.slice(0,vagas).map(lerFoto));
+  FOTOS_ATUAIS=FOTOS_ATUAIS.concat(novas).slice(0,5);
+  renderizarFotos()
+}
 function limparCamposDaNota(){setSelect("regional","");setSelect("distribuidora","EQTL MA");for(const id of idsAuto)setInput(id,"");setInput("equipe","EQP NIP");setSelect("justificativa","");setInput("nota_campo",chaveNota(document.getElementById("nota").value))}
 function preencherPelaNota(){const nota=chaveNota(document.getElementById("nota").value);limparCamposDaNota();setInput("nota_campo",nota);const d=BASE_NOTAS[nota];if(!d)return;setSelect("distribuidora",d.distribuidora||"EQTL MA");setSelect("regional",d.regional||"");setInput("data_solicitacao",d.data_solicitacao||"");setInput("conta_contrato",d.conta_contrato||"");setInput("parceiro",d.parceiro||"");setInput("endereco",d.endereco||"");setInput("data_visita",d.data_visita||"");setInput("horario",d.horario||"");setInput("latitude",d.latitude||"");setInput("longitude",d.longitude||"");setInput("equipe",d.equipe||"EQP NIP");setInput("descricao_expurgo",d.descricao_expurgo||"");setInput("medidor_cliente",d.medidor_cliente||"");setInput("medidor_vizinho",d.medidor_vizinho||"");setInput("estrutura_proxima",d.estrutura_proxima||"");if(d.justificativa){setSelect("justificativa",d.justificativa);atualizarTratativa(d.tratativa||"")}else{setSelect("justificativa","");setInput("tratativa",d.tratativa||"")}}
 function limparTudo(){document.getElementById("nota").value="";limparCamposDaNota();setInput("nota_campo","");limparFotos();document.getElementById("nota").focus()}
 document.getElementById("nota").addEventListener("input",preencherPelaNota);document.getElementById("nota").addEventListener("change",preencherPelaNota);document.getElementById("justificativa").addEventListener("change",()=>atualizarTratativa(""));
 document.getElementById("photoInput").addEventListener("change",function(evt){carregarFotos(evt.target.files)});
+const evidenceGrid=document.getElementById("evidenceGrid");
+evidenceGrid.addEventListener("click",()=>evidenceGrid.focus());
+evidenceGrid.addEventListener("paste",colarFotosDoClipboard);
 document.getElementById("nota").focus();
 </script>
 </body></html>'''
