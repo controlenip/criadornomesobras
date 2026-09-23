@@ -229,11 +229,14 @@ html_doc = r'''<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Calibri,Arial,sans-serif;color:#000}
-.actions{width:801px;margin:0 auto 7px;display:flex;justify-content:flex-end;gap:7px;font-family:Calibri,Arial,sans-serif}
-.action-btn,.photo-btn{border:0;border-radius:2px;min-width:92px;height:27px;padding:0 10px;font-size:9pt;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;background:#17375E}
-.clear-btn{background:#F79646}.photo-btn{background:#24465F}.photo-btn input{display:none}
+.actions{position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:9999;width:801px;padding:4px 0 5px;display:flex;justify-content:flex-end;gap:7px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.96);border-bottom:1px solid #e2e8f0}
+.action-btn,.photo-btn{border:0;border-radius:3px;min-width:128px;height:29px;padding:0 11px;font-size:9pt;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.action-btn:hover,.photo-btn:hover{filter:brightness(.94)}
+.excel-btn{background:#217346}.pdf-btn{background:#B42318}.clear-btn{background:#F79646}.photo-btn{background:#24465F}.photo-btn input{display:none}
+.print-stage{padding-top:39px}
 .sheet-canvas{width:801px;min-height:1190px;margin:0 auto;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .top-space,.bottom-space{height:12.75pt}
 .report-table{width:762px;margin-left:20px;border-collapse:collapse;table-layout:fixed;font-family:Calibri,Arial,sans-serif;color:#000}
@@ -272,7 +275,7 @@ html_doc = r'''<!doctype html>
  @page{size:A4 portrait;margin:0}
  html,body{width:210mm;height:297mm;margin:0!important;padding:0!important;overflow:hidden}
  .actions{display:none!important}
- .print-stage{width:210mm;height:297mm;display:flex;align-items:center;justify-content:center;overflow:hidden}
+ .print-stage{width:210mm;height:297mm;padding-top:0!important;display:flex;align-items:center;justify-content:center;overflow:hidden}
  .sheet-canvas{margin:0;transform:scale(.88);transform-origin:center center;flex:0 0 auto}
  .fi:focus,.fs:focus{outline:none!important}.fs{appearance:none;-webkit-appearance:none;padding-right:4px}.select-cell::after{display:none!important}.evidence-placeholder{display:none!important}
 }
@@ -281,8 +284,9 @@ html_doc = r'''<!doctype html>
 <body>
 <div class="actions">
 <label class="photo-btn" title="Adicionar até 5 fotos à área de evidências">FOTOS 📷 <span id="photoCount" class="photo-count">0/5</span><input id="photoInput" type="file" accept="image/png,image/jpeg" multiple></label>
-<button class="action-btn" type="button" onclick="window.print()" title="Imprimir ou salvar como PDF">SALVAR ⚡</button>
-<button class="action-btn clear-btn" type="button" onclick="limparTudo()">LIMPAR 🧹</button>
+<button class="action-btn excel-btn" type="button" onclick="exportarExcel()" title="Baixar o relatório preenchido em Excel">EXPORTAR EXCEL 📊</button>
+<button class="action-btn pdf-btn" type="button" onclick="exportarPDF()" title="Imprimir ou salvar o relatório preenchido em PDF">EXPORTAR PDF 📄</button>
+<button class="action-btn clear-btn" type="button" onclick="limparTudo()" title="Limpar todos os dados e fotos">LIMPAR 🧹</button>
 </div>
 <div class="print-stage"><div class="sheet-canvas">
 <div class="top-space"></div>
@@ -329,6 +333,46 @@ html_doc = r'''<!doctype html>
 <div class="bottom-space"></div>
 </div></div>
 <script>
+let FOTOS_ATUAIS=[];
+const LOGO_B64="__LOGO__";
+function valorCampo(id){const el=document.getElementById(id);return el?((el.value||"").toString().trim()):""}
+function baixarBlob(blob,nome){const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
+function exportarPDF(){window.print()}
+function excelColPos(frac){const widths=[17.5703125,11.85546875,13.42578125,13.28515625,11,20,10.85546875,10.85546875];const total=widths.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<widths.length;i++){if(alvo<=widths[i])return 1+i+(alvo/widths[i]);alvo-=widths[i]}return 9}
+function excelRowPos(frac){const heights=[12.95,15,15,15,15,15,15,15,15,15,15,15,15,15,15,30.75,27];const total=heights.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<heights.length;i++){if(alvo<=heights[i])return 37+i+(alvo/heights[i]);alvo-=heights[i]}return 54}
+async function exportarExcel(){
+  if(typeof ExcelJS==="undefined"){alert("Não foi possível carregar o módulo de exportação Excel. Verifique a conexão com a internet e tente novamente.");return}
+  const wb=new ExcelJS.Workbook();wb.creator="NIP";wb.created=new Date();
+  const ws=wb.addWorksheet("Modelo",{pageSetup:{paperSize:9,orientation:"portrait",fitToPage:false,scale:88,horizontalCentered:true,verticalCentered:true,margins:{left:0,right:0,top:0,bottom:0,header:0,footer:0}}});
+  ws.views=[{showGridLines:false,zoomScale:100}];
+  const larguras={A:2.85546875,B:17.5703125,C:11.85546875,D:13.42578125,E:13.28515625,F:11,G:20,H:10.85546875,I:10.85546875};Object.entries(larguras).forEach(([c,w])=>ws.getColumn(c).width=w);
+  const alturas={2:15,3:23.25,4:12.75,6:20.25,8:16.5,10:26.25,11:15,12:25.5,13:15,14:25.5,16:16.5,17:15,18:26.25,19:15,20:26.25,21:15,22:25.5,23:15.6,24:16.5,25:9,26:25.5,27:6,28:25.5,29:6.95,30:25.5,31:15,32:16.5,33:15,34:25.5,35:7.5,36:25.5,37:9.95,38:12.95,39:15,40:15,41:15,42:15,43:15,44:15,45:15,46:15,47:15,48:15,49:15,50:15,51:15,52:15,53:30.75,54:27};Object.entries(alturas).forEach(([r,h])=>ws.getRow(Number(r)).height=h);
+  ws.pageSetup.printArea="B2:I54";
+  const PRETO="FF000000",BRANCO="FFFFFFFF",AZUL="FF17375E",AZUL2="FF24465F",AZULCLARO="FFC6D9F1";
+  const borda={top:{style:"thin",color:{argb:PRETO}},left:{style:"thin",color:{argb:PRETO}},bottom:{style:"thin",color:{argb:PRETO}},right:{style:"thin",color:{argb:PRETO}}};
+  function fillRange(rng,argb){ws.getCells?null:null;const [a,b]=rng.split(":");const c1=ws.getCell(a),c2=ws.getCell(b);for(let r=c1.row;r<=c2.row;r++)for(let c=c1.col;c<=c2.col;c++)ws.getCell(r,c).fill={type:"pattern",pattern:"solid",fgColor:{argb}}}
+  function borderRange(rng){const [a,b]=rng.split(":");const c1=ws.getCell(a),c2=ws.getCell(b);for(let r=c1.row;r<=c2.row;r++)for(let c=c1.col;c<=c2.col;c++)ws.getCell(r,c).border=borda}
+  function styleCell(addr,{bold=true,size=10,fill=null,color=PRETO,wrap=false,align="center"}={}){const c=ws.getCell(addr);c.font={name:"Calibri",size,bold,color:{argb:color}};c.alignment={horizontal:align,vertical:"middle",wrapText:wrap};if(fill)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:fill}};c.border=borda;return c}
+  fillRange("B2:I4",AZUL);ws.mergeCells("B2:C4");ws.mergeCells("D3:H3");
+  ws.getCell("D3").value="Formulário de Não Atendimento Expansão";ws.getCell("D3").font={name:"Calibri",size:18,bold:true,color:{argb:BRANCO}};ws.getCell("D3").alignment={horizontal:"center",vertical:"middle"};
+  ws.getCell("B2").border={right:{style:"medium",color:{argb:BRANCO}}};
+  try{const logo=wb.addImage({base64:`data:image/png;base64,${LOGO_B64}`,extension:"png"});ws.addImage(logo,{tl:{col:1.15,row:1.18},br:{col:2.85,row:3.86},editAs:"oneCell"})}catch(e){}
+  const secoes=[["B8:I8","Dados do Cliente:"],["B16:I16","Dados da Visita:"],["B24:I24","Motivo do expurgo:"],["B32:I32","Evidências:"]];
+  secoes.forEach(([rng,txt])=>{ws.mergeCells(rng);const c=ws.getCell(rng.split(":")[0]);c.value=txt;c.fill={type:"pattern",pattern:"solid",fgColor:{argb:AZUL2}};c.font={name:"Calibri",size:10,bold:true,color:{argb:BRANCO}};c.alignment={horizontal:"left",vertical:"middle",indent:1}});
+  const merges=["C10:E10","H10:I10","C12:I12","C14:I14","C18:E18","H18:I18","C20:E20","H20:I20","C22:I22","C26:I26","C28:I28","C30:I30","C34:E34","H34:I34","C36:E36","H36:I36","B38:I54"];merges.forEach(r=>ws.mergeCells(r));
+  [["B6","Distribuidora:"],["E6","Regional:"],["H6","Data da\nsolicitação:"],["B10","Nº da nota:"],["G10","Conta Contrato:"],["B12","Parceiro de Negócios:"],["B14","Endereço:"],["B18","Data:"],["G18","Latitude:"],["B20","Horário:"],["G20","Longitude:"],["B22","Identificação da\nequipe:"],["B26","Justificativa:"],["B28","Descrição do\nExpurgo:"],["B30","Tratativa no Sistema\nComercial:"],["B34","Número do medidor\ndo cliente atendido:"],["G34","Número da nota do\natendimento em campo:"],["B36","Número do medidor\ndo vizinho:"],["G36","Número da estrutura\nmais próxima:"]].forEach(([a,v])=>{const c=styleCell(a,{bold:true,size:(a==="H6"?8:10),wrap:v.includes("\n")});c.value=v});
+  [["C6","distribuidora"],["F6","regional"],["I6","data_solicitacao"],["C10","nota"],["H10","conta_contrato"],["C12","parceiro"],["C14","endereco"],["C18","data_visita"],["H18","latitude"],["C20","horario"],["H20","longitude"],["C22","equipe"],["C26","justificativa"],["C28","descricao_expurgo"],["C34","medidor_cliente"],["C36","medidor_vizinho"],["H36","estrutura_proxima"]].forEach(([a,id])=>{const c=styleCell(a,{bold:true,size:10});c.value=valorCampo(id)});
+  styleCell("B30",{bold:true,size:9,fill:AZULCLARO,wrap:true});styleCell("C30",{bold:true,size:10,fill:AZULCLARO});ws.getCell("C30").value={formula:'IF(C26="","",VLOOKUP(C26,Apoio!$A$1:$B$27,2,0))',result:valorCampo("tratativa")};
+  styleCell("H34",{bold:true,size:10});ws.getCell("H34").value={formula:"C10",result:valorCampo("nota_campo")||valorCampo("nota")};
+  ["C6","F6","I6","C10","H10","C12","C14","C18","H18","C20","H20","C22","C26","C28","C30","C34","H34","C36","H36"].forEach(a=>{ws.getCell(a).alignment={horizontal:"center",vertical:"middle",wrapText:false}});
+  borderRange("B6:C6");borderRange("E6:F6");borderRange("H6:I6");borderRange("B10:E10");borderRange("G10:I10");borderRange("B12:I12");borderRange("B14:I14");borderRange("B18:E18");borderRange("G18:I18");borderRange("B20:E20");borderRange("G20:I20");borderRange("B22:I22");borderRange("B26:I26");borderRange("B28:I28");borderRange("B30:I30");borderRange("B34:E34");borderRange("G34:I34");borderRange("B36:E36");borderRange("G36:I36");borderRange("B38:I54");
+  ws.getCell("C26").dataValidation={type:"list",allowBlank:true,formulae:["Apoio!$A$2:$A$27"]};
+  const apoio=wb.addWorksheet("Apoio");apoio.state="hidden";apoio.getCell("A1").value="Motivo";apoio.getCell("B1").value="Tratativa";let rr=2;for(const [mot,tr] of Object.entries(TRATATIVAS)){apoio.getCell(rr,1).value=mot;apoio.getCell(rr,2).value=tr;rr++}
+  const grade=[[0,0,1,1],[0,0,.5,1],[.5,0,1,1],[0,0,1/3,1],[1/3,0,2/3,1],[2/3,0,1,1],[0,0,.5,.5],[.5,0,1,.5],[0,.5,.5,1],[.5,.5,1,1],[0,0,1/3,.5],[1/3,0,2/3,.5],[2/3,0,1,.5],[0,.5,.5,1],[.5,.5,1,1]];
+  const layouts={1:[grade[0]],2:[grade[1],grade[2]],3:[grade[3],grade[4],grade[5]],4:[grade[6],grade[7],grade[8],grade[9]],5:[grade[10],grade[11],grade[12],grade[13],grade[14]]};
+  if(FOTOS_ATUAIS.length){const lay=layouts[Math.min(5,FOTOS_ATUAIS.length)]||[];for(let i=0;i<Math.min(5,FOTOS_ATUAIS.length);i++){const url=FOTOS_ATUAIS[i];const ext=url.startsWith("data:image/png")?"png":"jpeg";try{const id=wb.addImage({base64:url,extension:ext});const [x1,y1,x2,y2]=lay[i];ws.addImage(id,{tl:{col:excelColPos(x1),row:excelRowPos(y1)},br:{col:excelColPos(x2),row:excelRowPos(y2)},editAs:"oneCell"})}catch(e){}}}
+  const buf=await wb.xlsx.writeBuffer();const nome=(chaveNota(valorCampo("nota"))||"SEM_NOTA").replace(/[^A-Z0-9_-]/g,"_");baixarBlob(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),`Relatorio_Expurgo_${nome}.xlsx`)
+}
 const BASE_NOTAS=__BASE_JSON__;
 const TRATATIVAS={"ATENDIMENTO EM TERRENO DE TERCEIROS": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE ATENDIDO POR OUTRA ÁREA": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE ATENDIDO POR OUTRA SOLICITAÇÃO (EXPANSÃO)": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE CONSTRUIU A PRÓPRIA REDE SEM APRESENTAR PROJETO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE DESISTIU DO SERVIÇO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE DOMÍNIO PÚBLICO/LITÍGIO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE LOTEAMENTO PARTICULAR/ CONDOMÍNIO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE EM ÁREA DE PRESERVAÇÃO AMBIENTAL": "SUSPENSÃO", "CLIENTE EMUC": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE LIGADO A REVELIA (CLANDESTINO)": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE NÃO LOCALIZADO": "REJEIÇÃO PARA CANCELAMENTO", "CLIENTE URBANO SE ARRUAMENTO": "REJEIÇÃO PARA CANCELAMENTO", "ERRO NA ABERTURA - CLIENTE DESEJA OUTRO SERVIÇO": "REJEIÇÃO PARA CANCELAMENTO", "JÁ EXISTE REDE DE BT PARA ATENDER O CLIENTE": "DEVOLVER A GSTC", "OBSTACULO IMPEDE EXECUÇÃO/ SEM ACESSO": "SUSPENSÃO", "PADRÃO INCORRETO": "DEVOLVER A GSTC", "PADRÃO INEXISTENTE": "DEVOLVER A GSTC", "PADRÃO TRIFÁSICO INEXISTENTE": "DEVOLVER A GSTC", "PEDIDO EM DUPLICIDADE": "REJEIÇÃO PARA CANCELAMENTO", "RECLASSIFICAÇÃO RR PARA UB": "INFORMAR PARA AJUSTE NO INDICADOR", "RECLASSIFICAÇÃO UB PARA RR": "INFORMAR PARA AJUSTE NO INDICADOR", "SEM ACESSO PERIODO CHUVOSO": "SUSPENSÃO", "SOMENTE O TERRENO": "REJEIÇÃO PARA CANCELAMENTO", "UC DEMOLIDA/ ABANDONADA": "REJEIÇÃO PARA CANCELAMENTO", "CUSTEIO": "REJEIÇÃO PARA CANCELAMENTO"};
 const idsAuto=["data_solicitacao","conta_contrato","parceiro","endereco","data_visita","horario","latitude","longitude","equipe","descricao_expurgo","tratativa","medidor_cliente","medidor_vizinho","estrutura_proxima"];
@@ -338,9 +382,9 @@ function setSelect(id,valor){const el=document.getElementById(id);if(!el)return;
 function atualizarTratativa(preferirBase=""){const j=document.getElementById("justificativa").value||"";setInput("tratativa",preferirBase||TRATATIVAS[j]||"")}
 function atualizarContadorFotos(qtd){const c=document.getElementById("photoCount");if(c)c.textContent=`${qtd}/5`}
 function placeholderFotos(){return '<label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos</label>'}
-function limparFotos(){const grade=document.getElementById("evidenceGrid");grade.className="evidence-grid empty";grade.innerHTML=placeholderFotos();document.getElementById("photoInput").value="";atualizarContadorFotos(0)}
+function limparFotos(){FOTOS_ATUAIS=[];const grade=document.getElementById("evidenceGrid");grade.className="evidence-grid empty";grade.innerHTML=placeholderFotos();document.getElementById("photoInput").value="";atualizarContadorFotos(0)}
 function lerFoto(arquivo){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=e=>resolve(e.target.result);reader.onerror=reject;reader.readAsDataURL(arquivo)})}
-async function carregarFotos(fileList){const todos=Array.from(fileList||[]);if(!todos.length){limparFotos();return}if(todos.length>5){alert("Selecione no máximo 5 fotos. As 5 primeiras serão utilizadas.")}const arquivos=todos.slice(0,5);const urls=await Promise.all(arquivos.map(lerFoto));const grade=document.getElementById("evidenceGrid");grade.className=`evidence-grid photos-${urls.length}`;grade.innerHTML="";urls.forEach((url,i)=>{const item=document.createElement("div");item.className="evidence-item";const img=document.createElement("img");img.src=url;img.alt=`Evidência ${i+1}`;item.appendChild(img);grade.appendChild(item)});atualizarContadorFotos(urls.length)}
+async function carregarFotos(fileList){const todos=Array.from(fileList||[]);if(!todos.length){limparFotos();return}if(todos.length>5){alert("Selecione no máximo 5 fotos. As 5 primeiras serão utilizadas.")}const arquivos=todos.slice(0,5);const urls=await Promise.all(arquivos.map(lerFoto));FOTOS_ATUAIS=urls.slice();const grade=document.getElementById("evidenceGrid");grade.className=`evidence-grid photos-${urls.length}`;grade.innerHTML="";urls.forEach((url,i)=>{const item=document.createElement("div");item.className="evidence-item";const img=document.createElement("img");img.src=url;img.alt=`Evidência ${i+1}`;item.appendChild(img);grade.appendChild(item)});atualizarContadorFotos(urls.length)}
 function limparCamposDaNota(){setSelect("regional","");setSelect("distribuidora","EQTL MA");for(const id of idsAuto)setInput(id,"");setInput("equipe","EQP NIP");setSelect("justificativa","");setInput("nota_campo",chaveNota(document.getElementById("nota").value))}
 function preencherPelaNota(){const nota=chaveNota(document.getElementById("nota").value);limparCamposDaNota();setInput("nota_campo",nota);const d=BASE_NOTAS[nota];if(!d)return;setSelect("distribuidora",d.distribuidora||"EQTL MA");setSelect("regional",d.regional||"");setInput("data_solicitacao",d.data_solicitacao||"");setInput("conta_contrato",d.conta_contrato||"");setInput("parceiro",d.parceiro||"");setInput("endereco",d.endereco||"");setInput("data_visita",d.data_visita||"");setInput("horario",d.horario||"");setInput("latitude",d.latitude||"");setInput("longitude",d.longitude||"");setInput("equipe",d.equipe||"EQP NIP");setInput("descricao_expurgo",d.descricao_expurgo||"");setInput("medidor_cliente",d.medidor_cliente||"");setInput("medidor_vizinho",d.medidor_vizinho||"");setInput("estrutura_proxima",d.estrutura_proxima||"");if(d.justificativa){setSelect("justificativa",d.justificativa);atualizarTratativa(d.tratativa||"")}else{setSelect("justificativa","");setInput("tratativa",d.tratativa||"")}}
 function limparTudo(){document.getElementById("nota").value="";limparCamposDaNota();setInput("nota_campo","");limparFotos();document.getElementById("nota").focus()}
@@ -357,4 +401,4 @@ html_doc = (
     .replace("__BASE_JSON__", base_json)
 )
 
-components.html(html_doc, height=1270, scrolling=False)
+components.html(html_doc, height=1320, scrolling=False)
