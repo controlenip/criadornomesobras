@@ -266,8 +266,8 @@ html_doc = r'''<!doctype html>
 .evidence-grid{width:100%;height:249.2pt!important;min-height:249.2pt!important;max-height:249.2pt!important;display:grid;gap:1px;background:#000;overflow:hidden;outline:none;cursor:pointer}
 .evidence-grid.empty{display:flex;background:#fff;align-items:center;justify-content:center}
 .evidence-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:9pt;font-weight:600;cursor:pointer;text-align:center}
-.evidence-item{min-width:0;min-height:0;background:#fff;overflow:hidden}
-.evidence-item img{width:100%;height:100%;display:block;object-fit:cover;object-position:center}
+.evidence-item{min-width:0;min-height:0;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.evidence-item img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;object-fit:contain;object-position:center}
 .evidence-grid.photos-1{grid-template-columns:1fr;grid-template-rows:1fr}
 .evidence-grid.photos-2{grid-template-columns:repeat(2,1fr);grid-template-rows:1fr}
 .evidence-grid.photos-3{grid-template-columns:repeat(3,1fr);grid-template-rows:1fr}
@@ -396,6 +396,7 @@ async function gerarPDFBlob(){
 }
 function excelColPos(frac){const widths=[17.5703125,11.85546875,13.42578125,13.28515625,11,20,10.85546875,10.85546875];const total=widths.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<widths.length;i++){if(alvo<=widths[i])return 1+i+(alvo/widths[i]);alvo-=widths[i]}return 9}
 function excelRowPos(frac){const heights=[12.95,15,15,15,15,15,15,15,15,15,15,15,15,15,15,30.75,27];const total=heights.reduce((a,b)=>a+b,0);let alvo=Math.max(0,Math.min(1,frac))*total;for(let i=0;i<heights.length;i++){if(alvo<=heights[i])return 37+i+(alvo/heights[i]);alvo-=heights[i]}return 54}
+function dimensoesImagem(dataUrl){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve({width:img.naturalWidth||img.width,height:img.naturalHeight||img.height});img.onerror=reject;img.src=dataUrl})}
 async function gerarExcelBlob(){
   if(typeof ExcelJS==="undefined"){alert("Não foi possível carregar o módulo de exportação Excel. Verifique a conexão com a internet e tente novamente.");return}
   const wb=new ExcelJS.Workbook();wb.creator="NIP";wb.created=new Date();
@@ -426,7 +427,28 @@ async function gerarExcelBlob(){
   const apoio=wb.addWorksheet("Apoio");apoio.state="hidden";apoio.getCell("A1").value="Motivo";apoio.getCell("B1").value="Tratativa";let rr=2;for(const [mot,tr] of Object.entries(TRATATIVAS)){apoio.getCell(rr,1).value=mot;apoio.getCell(rr,2).value=tr;rr++}
   const grade=[[0,0,1,1],[0,0,.5,1],[.5,0,1,1],[0,0,1/3,1],[1/3,0,2/3,1],[2/3,0,1,1],[0,0,.5,.5],[.5,0,1,.5],[0,.5,.5,1],[.5,.5,1,1],[0,0,1/3,.5],[1/3,0,2/3,.5],[2/3,0,1,.5],[0,.5,.5,1],[.5,.5,1,1]];
   const layouts={1:[grade[0]],2:[grade[1],grade[2]],3:[grade[3],grade[4],grade[5]],4:[grade[6],grade[7],grade[8],grade[9]],5:[grade[10],grade[11],grade[12],grade[13],grade[14]]};
-  if(FOTOS_ATUAIS.length){const lay=layouts[Math.min(5,FOTOS_ATUAIS.length)]||[];for(let i=0;i<Math.min(5,FOTOS_ATUAIS.length);i++){const url=FOTOS_ATUAIS[i];const ext=url.startsWith("data:image/png")?"png":"jpeg";try{const id=wb.addImage({base64:url,extension:ext});const [x1,y1,x2,y2]=lay[i];ws.addImage(id,{tl:{col:excelColPos(x1),row:excelRowPos(y1)},br:{col:excelColPos(x2),row:excelRowPos(y2)},editAs:"oneCell"})}catch(e){}}}
+  if(FOTOS_ATUAIS.length){
+    const lay=layouts[Math.min(5,FOTOS_ATUAIS.length)]||[];
+    const EVID_W_PX=762;
+    const EVID_H_PX=249.2*(96/72);
+    for(let i=0;i<Math.min(5,FOTOS_ATUAIS.length);i++){
+      const url=FOTOS_ATUAIS[i];
+      const ext=url.startsWith("data:image/png")?"png":"jpeg";
+      try{
+        const id=wb.addImage({base64:url,extension:ext});
+        const [x1,y1,x2,y2]=lay[i];
+        const dims=await dimensoesImagem(url);
+        const slotW=(x2-x1)*EVID_W_PX;
+        const slotH=(y2-y1)*EVID_H_PX;
+        const escala=Math.min(1,slotW/dims.width,slotH/dims.height);
+        const renderW=Math.max(1,dims.width*escala);
+        const renderH=Math.max(1,dims.height*escala);
+        const xFrac=x1+((slotW-renderW)/2)/EVID_W_PX;
+        const yFrac=y1+((slotH-renderH)/2)/EVID_H_PX;
+        ws.addImage(id,{tl:{col:excelColPos(xFrac),row:excelRowPos(yFrac)},ext:{width:renderW,height:renderH},editAs:"oneCell"});
+      }catch(e){console.warn("Não foi possível inserir a evidência mantendo a proporção original.",e)}
+    }
+  }
   const buf=await wb.xlsx.writeBuffer();
   return new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }
