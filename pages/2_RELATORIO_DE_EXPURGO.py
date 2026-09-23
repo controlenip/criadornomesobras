@@ -22,7 +22,7 @@ st.markdown(
         .block-container {
             padding-top: 0.55rem !important;
             padding-bottom: 1rem !important;
-            max-width: 900px !important;
+            max-width: 1160px !important;
         }
         [data-testid="stAppViewBlockContainer"] { overflow: visible; }
         iframe { border: 0 !important; }
@@ -232,11 +232,11 @@ html_doc = r'''<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Calibri,Arial,sans-serif;color:#000}
-.actions{position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:9999;width:801px;padding:4px 0 5px;display:flex;justify-content:flex-end;gap:7px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.96);border-bottom:1px solid #e2e8f0}
-.action-btn,.photo-btn{border:0;border-radius:3px;min-width:128px;height:29px;padding:0 11px;font-size:9pt;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.actions{position:fixed;top:72px;right:10px;left:auto;transform:none;z-index:9999;width:122px;padding:8px;display:flex;flex-direction:column;align-items:stretch;gap:8px;font-family:Calibri,Arial,sans-serif;background:rgba(255,255,255,.97);border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.action-btn,.photo-btn{border:0;border-radius:4px;width:100%;min-width:0;height:34px;padding:0 6px;font-size:8.4pt;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;background:#17375E;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap}
 .action-btn:hover,.photo-btn:hover{filter:brightness(.94)}
 .excel-btn{background:#217346}.pdf-btn{background:#B42318}.clear-btn{background:#F79646}.photo-btn{background:#24465F}.photo-btn input{display:none}
-.print-stage{padding-top:39px}
+.print-stage{padding-top:0;padding-right:140px}
 .sheet-canvas{width:801px;min-height:1190px;margin:0 auto;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .top-space,.bottom-space{height:12.75pt}
 .report-table{width:762px;margin-left:20px;border-collapse:collapse;table-layout:fixed;font-family:Calibri,Arial,sans-serif;color:#000}
@@ -257,8 +257,8 @@ html_doc = r'''<!doctype html>
 .select-cell{position:relative}
 .select-cell::after{content:"▾";position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:6.5pt;line-height:1;color:#64748b;opacity:.16;pointer-events:none;transition:opacity .15s ease}
 .select-cell:hover::after,.select-cell:focus-within::after{opacity:.62}
-.evidence-cell{height:249.2pt;border:1px solid #000;background:#fff;position:relative;overflow:hidden;padding:0!important}
-.evidence-grid{width:100%;height:100%;display:grid;gap:1px;background:#000;overflow:hidden}
+.evidence-cell{height:249.2pt!important;min-height:249.2pt!important;max-height:249.2pt!important;border:1px solid #000;background:#fff;position:relative;overflow:hidden;padding:0!important}
+.evidence-grid{width:100%;height:249.2pt!important;min-height:249.2pt!important;max-height:249.2pt!important;display:grid;gap:1px;background:#000;overflow:hidden}
 .evidence-grid.empty{display:flex;background:#fff;align-items:center;justify-content:center}
 .evidence-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:9pt;font-weight:600;cursor:pointer;text-align:center}
 .evidence-item{min-width:0;min-height:0;background:#fff;overflow:hidden}
@@ -275,7 +275,7 @@ html_doc = r'''<!doctype html>
  @page{size:A4 portrait;margin:0}
  html,body{width:210mm;height:297mm;margin:0!important;padding:0!important;overflow:hidden}
  .actions{display:none!important}
- .print-stage{width:210mm;height:297mm;padding-top:0!important;display:flex;align-items:center;justify-content:center;overflow:hidden}
+ .print-stage{width:210mm;height:297mm;padding-top:0!important;padding-right:0!important;display:flex;align-items:center;justify-content:center;overflow:hidden}
  .sheet-canvas{margin:0;transform:scale(.88);transform-origin:center center;flex:0 0 auto}
  .fi:focus,.fs:focus{outline:none!important}.fs{appearance:none;-webkit-appearance:none;padding-right:4px}.select-cell::after{display:none!important}.evidence-placeholder{display:none!important}
 }
@@ -328,7 +328,7 @@ html_doc = r'''<!doctype html>
 <tr class="blank-row" style="height:7.5pt"><td colspan="8"></td></tr>
 <tr style="height:25.5pt"><td class="lbl-cell lbl-wrap">Número do medidor<br>do vizinho:</td><td class="value-cell" colspan="3"><input id="medidor_vizinho" class="fi" type="text"></td><td class="spacer-cell"></td><td class="lbl-cell lbl-wrap">Número da estrutura<br>mais próxima:</td><td class="value-cell" colspan="2"><input id="estrutura_proxima" class="fi" type="text"></td></tr>
 <tr class="blank-row" style="height:9.95pt"><td colspan="8"></td></tr>
-<tr><td class="evidence-cell" colspan="8"><div id="evidenceGrid" class="evidence-grid empty"><label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos</label></div></td></tr>
+<tr style="height:249.2pt!important"><td class="evidence-cell" colspan="8"><div id="evidenceGrid" class="evidence-grid empty"><label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos</label></div></td></tr>
 </table>
 <div class="bottom-space"></div>
 </div></div>
