@@ -250,22 +250,37 @@ html_doc = r'''<!doctype html>
 .treat-cell{background:#C6D9F1}
 .fi,.fs{width:100%;height:100%;min-height:100%;margin:0;padding:0 4px;border:0;outline:0;background:transparent;color:#000;font-family:Calibri,Arial,sans-serif;font-size:10pt;font-weight:700;text-align:center;text-transform:uppercase;line-height:1}
 .fi:focus,.fs:focus{outline:1px solid #4F81BD;outline-offset:-1px}.fi[readonly]{cursor:default}
-.fs{appearance:auto;-webkit-appearance:menulist;text-align-last:center;cursor:pointer}
-.evidence-cell{height:249.2pt;border:1px solid #000;background:#fff;position:relative;overflow:hidden}
-#evidenceImg{display:none;width:100%;height:100%;object-fit:contain;object-position:center}
+.fs{appearance:none;-webkit-appearance:none;text-align-last:center;cursor:pointer;padding:0 13px 0 4px}
+.select-cell{position:relative}
+.select-cell::after{content:"▾";position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:6.5pt;line-height:1;color:#64748b;opacity:.16;pointer-events:none;transition:opacity .15s ease}
+.select-cell:hover::after,.select-cell:focus-within::after{opacity:.62}
+.evidence-cell{height:249.2pt;border:1px solid #000;background:#fff;position:relative;overflow:hidden;padding:0!important}
+.evidence-grid{width:100%;height:100%;display:grid;gap:1px;background:#000;overflow:hidden}
+.evidence-grid.empty{display:flex;background:#fff;align-items:center;justify-content:center}
+.evidence-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:9pt;font-weight:600;cursor:pointer;text-align:center}
+.evidence-item{min-width:0;min-height:0;background:#fff;overflow:hidden}
+.evidence-item img{width:100%;height:100%;display:block;object-fit:cover;object-position:center}
+.evidence-grid.photos-1{grid-template-columns:1fr;grid-template-rows:1fr}
+.evidence-grid.photos-2{grid-template-columns:repeat(2,1fr);grid-template-rows:1fr}
+.evidence-grid.photos-3{grid-template-columns:repeat(3,1fr);grid-template-rows:1fr}
+.evidence-grid.photos-4{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,1fr)}
+.evidence-grid.photos-5{grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(2,1fr)}
+.evidence-grid.photos-5 .evidence-item:nth-child(-n+3){grid-column:span 2}
+.evidence-grid.photos-5 .evidence-item:nth-child(n+4){grid-column:span 3}
+.photo-count{font-size:8pt;font-weight:700;margin-left:4px;opacity:.9}
 @media print{
  @page{size:A4 portrait;margin:0}
  html,body{width:210mm;height:297mm;margin:0!important;padding:0!important;overflow:hidden}
  .actions{display:none!important}
  .print-stage{width:210mm;height:297mm;display:flex;align-items:center;justify-content:center;overflow:hidden}
  .sheet-canvas{margin:0;transform:scale(.88);transform-origin:center center;flex:0 0 auto}
- .fi:focus,.fs:focus{outline:none!important}.fs{appearance:none;-webkit-appearance:none}
+ .fi:focus,.fs:focus{outline:none!important}.fs{appearance:none;-webkit-appearance:none;padding-right:4px}.select-cell::after{display:none!important}.evidence-placeholder{display:none!important}
 }
 </style>
 </head>
 <body>
 <div class="actions">
-<label class="photo-btn" title="Adicionar foto à área de evidências">FOTO 📷<input id="photoInput" type="file" accept="image/png,image/jpeg"></label>
+<label class="photo-btn" title="Adicionar até 5 fotos à área de evidências">FOTOS 📷 <span id="photoCount" class="photo-count">0/5</span><input id="photoInput" type="file" accept="image/png,image/jpeg" multiple></label>
 <button class="action-btn" type="button" onclick="window.print()" title="Imprimir ou salvar como PDF">SALVAR ⚡</button>
 <button class="action-btn clear-btn" type="button" onclick="limparTudo()">LIMPAR 🧹</button>
 </div>
@@ -277,7 +292,7 @@ html_doc = r'''<!doctype html>
 <tr style="height:23.25pt"><td class="top-title" colspan="5">Formulário de Não Atendimento Expansão</td><td class="top-bg"></td></tr>
 <tr style="height:12.75pt"><td class="top-bg" colspan="6"></td></tr>
 <tr class="blank-row" style="height:12.75pt"><td colspan="8"></td></tr>
-<tr style="height:20.25pt"><td class="lbl-cell">Distribuidora:</td><td class="value-cell"><select id="distribuidora" class="fs"><option>EQTL MA</option><option>EQTL PA</option><option>EQTL PI</option><option>EQTL AL</option></select></td><td class="spacer-cell"></td><td class="lbl-cell">Regional:</td><td class="value-cell"><select id="regional" class="fs"><option value=""></option><option>CENTRO</option><option>LESTE</option><option>METROPOLITANA</option><option>NORDESTE</option><option>NOROESTE</option><option>NORTE</option><option>OESTE</option><option>SUL</option></select></td><td class="spacer-cell"></td><td class="lbl-cell lbl-small">Data da<br>solicitação:</td><td class="value-cell"><input id="data_solicitacao" class="fi" type="text"></td></tr>
+<tr style="height:20.25pt"><td class="lbl-cell">Distribuidora:</td><td class="value-cell select-cell"><select id="distribuidora" class="fs"><option>EQTL MA</option><option>EQTL PA</option><option>EQTL PI</option><option>EQTL AL</option></select></td><td class="spacer-cell"></td><td class="lbl-cell">Regional:</td><td class="value-cell select-cell"><select id="regional" class="fs"><option value=""></option><option>CENTRO</option><option>LESTE</option><option>METROPOLITANA</option><option>NORDESTE</option><option>NOROESTE</option><option>NORTE</option><option>OESTE</option><option>SUL</option></select></td><td class="spacer-cell"></td><td class="lbl-cell lbl-small">Data da<br>solicitação:</td><td class="value-cell"><input id="data_solicitacao" class="fi" type="text"></td></tr>
 <tr class="blank-row" style="height:12.75pt"><td colspan="8"></td></tr>
 <tr style="height:16.5pt"><td class="section-label">Dados do Cliente:</td><td class="section-fill" colspan="7"></td></tr>
 <tr class="blank-row" style="height:12.75pt"><td colspan="8"></td></tr>
@@ -297,7 +312,7 @@ html_doc = r'''<!doctype html>
 <tr class="blank-row" style="height:15.6pt"><td colspan="8"></td></tr>
 <tr style="height:16.5pt"><td class="section-label">Motivo do expurgo:</td><td class="section-fill" colspan="7"></td></tr>
 <tr class="blank-row" style="height:9pt"><td colspan="8"></td></tr>
-<tr style="height:25.5pt"><td class="lbl-cell">Justificativa:</td><td class="value-cell" colspan="7"><select id="justificativa" class="fs">__OPTIONS__</select></td></tr>
+<tr style="height:25.5pt"><td class="lbl-cell">Justificativa:</td><td class="value-cell select-cell" colspan="7"><select id="justificativa" class="fs">__OPTIONS__</select></td></tr>
 <tr class="blank-row" style="height:6pt"><td colspan="8"></td></tr>
 <tr style="height:25.5pt"><td class="lbl-cell lbl-wrap">Descrição do Expurgo:</td><td class="value-cell" colspan="7"><input id="descricao_expurgo" class="fi" type="text"></td></tr>
 <tr class="blank-row" style="height:6.95pt"><td colspan="8"></td></tr>
@@ -309,7 +324,7 @@ html_doc = r'''<!doctype html>
 <tr class="blank-row" style="height:7.5pt"><td colspan="8"></td></tr>
 <tr style="height:25.5pt"><td class="lbl-cell lbl-wrap">Número do medidor<br>do vizinho:</td><td class="value-cell" colspan="3"><input id="medidor_vizinho" class="fi" type="text"></td><td class="spacer-cell"></td><td class="lbl-cell lbl-wrap">Número da estrutura<br>mais próxima:</td><td class="value-cell" colspan="2"><input id="estrutura_proxima" class="fi" type="text"></td></tr>
 <tr class="blank-row" style="height:9.95pt"><td colspan="8"></td></tr>
-<tr><td class="evidence-cell" colspan="8"><img id="evidenceImg" alt="Evidência fotográfica"></td></tr>
+<tr><td class="evidence-cell" colspan="8"><div id="evidenceGrid" class="evidence-grid empty"><label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos</label></div></td></tr>
 </table>
 <div class="bottom-space"></div>
 </div></div>
@@ -321,12 +336,16 @@ function chaveNota(v){return(v||"").trim().toUpperCase().replace(/\.0$/,"")}
 function setInput(id,valor){const el=document.getElementById(id);if(el)el.value=valor||""}
 function setSelect(id,valor){const el=document.getElementById(id);if(!el)return;const v=(valor||"").toString().trim().toUpperCase();if(!v){el.value="";return}let achou=false;for(const op of el.options){if((op.value||op.text).toString().trim().toUpperCase()===v){el.value=op.value;achou=true;break}}if(!achou){const op=document.createElement("option");op.value=valor;op.textContent=valor;el.appendChild(op);el.value=valor}}
 function atualizarTratativa(preferirBase=""){const j=document.getElementById("justificativa").value||"";setInput("tratativa",preferirBase||TRATATIVAS[j]||"")}
-function limparFoto(){const foto=document.getElementById("evidenceImg");foto.removeAttribute("src");foto.style.display="none";document.getElementById("photoInput").value=""}
+function atualizarContadorFotos(qtd){const c=document.getElementById("photoCount");if(c)c.textContent=`${qtd}/5`}
+function placeholderFotos(){return '<label for="photoInput" class="evidence-placeholder">Clique aqui ou em FOTOS 📷 para adicionar até 5 fotos</label>'}
+function limparFotos(){const grade=document.getElementById("evidenceGrid");grade.className="evidence-grid empty";grade.innerHTML=placeholderFotos();document.getElementById("photoInput").value="";atualizarContadorFotos(0)}
+function lerFoto(arquivo){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=e=>resolve(e.target.result);reader.onerror=reject;reader.readAsDataURL(arquivo)})}
+async function carregarFotos(fileList){const todos=Array.from(fileList||[]);if(!todos.length){limparFotos();return}if(todos.length>5){alert("Selecione no máximo 5 fotos. As 5 primeiras serão utilizadas.")}const arquivos=todos.slice(0,5);const urls=await Promise.all(arquivos.map(lerFoto));const grade=document.getElementById("evidenceGrid");grade.className=`evidence-grid photos-${urls.length}`;grade.innerHTML="";urls.forEach((url,i)=>{const item=document.createElement("div");item.className="evidence-item";const img=document.createElement("img");img.src=url;img.alt=`Evidência ${i+1}`;item.appendChild(img);grade.appendChild(item)});atualizarContadorFotos(urls.length)}
 function limparCamposDaNota(){setSelect("regional","");setSelect("distribuidora","EQTL MA");for(const id of idsAuto)setInput(id,"");setInput("equipe","EQP NIP");setSelect("justificativa","");setInput("nota_campo",chaveNota(document.getElementById("nota").value))}
 function preencherPelaNota(){const nota=chaveNota(document.getElementById("nota").value);limparCamposDaNota();setInput("nota_campo",nota);const d=BASE_NOTAS[nota];if(!d)return;setSelect("distribuidora",d.distribuidora||"EQTL MA");setSelect("regional",d.regional||"");setInput("data_solicitacao",d.data_solicitacao||"");setInput("conta_contrato",d.conta_contrato||"");setInput("parceiro",d.parceiro||"");setInput("endereco",d.endereco||"");setInput("data_visita",d.data_visita||"");setInput("horario",d.horario||"");setInput("latitude",d.latitude||"");setInput("longitude",d.longitude||"");setInput("equipe",d.equipe||"EQP NIP");setInput("descricao_expurgo",d.descricao_expurgo||"");setInput("medidor_cliente",d.medidor_cliente||"");setInput("medidor_vizinho",d.medidor_vizinho||"");setInput("estrutura_proxima",d.estrutura_proxima||"");if(d.justificativa){setSelect("justificativa",d.justificativa);atualizarTratativa(d.tratativa||"")}else{setSelect("justificativa","");setInput("tratativa",d.tratativa||"")}}
-function limparTudo(){document.getElementById("nota").value="";limparCamposDaNota();setInput("nota_campo","");limparFoto();document.getElementById("nota").focus()}
+function limparTudo(){document.getElementById("nota").value="";limparCamposDaNota();setInput("nota_campo","");limparFotos();document.getElementById("nota").focus()}
 document.getElementById("nota").addEventListener("input",preencherPelaNota);document.getElementById("nota").addEventListener("change",preencherPelaNota);document.getElementById("justificativa").addEventListener("change",()=>atualizarTratativa(""));
-document.getElementById("photoInput").addEventListener("change",function(evt){const arquivo=evt.target.files&&evt.target.files[0];if(!arquivo){limparFoto();return}const reader=new FileReader();reader.onload=function(e){const foto=document.getElementById("evidenceImg");foto.src=e.target.result;foto.style.display="block"};reader.readAsDataURL(arquivo)});
+document.getElementById("photoInput").addEventListener("change",function(evt){carregarFotos(evt.target.files)});
 document.getElementById("nota").focus();
 </script>
 </body></html>'''
