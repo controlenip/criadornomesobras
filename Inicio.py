@@ -26,7 +26,30 @@ st.markdown(
 
         .hero {
             text-align: center;
-            padding: 8px 10px 18px 10px;
+            padding: 10px 10px 18px 10px;
+            overflow: visible !important;
+        }
+
+        .logo-wrap {
+            width: 100%;
+            min-height: 105px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible !important;
+            padding: 6px 0 4px 0;
+            box-sizing: border-box;
+        }
+
+        .logo-wrap img {
+            display: block;
+            width: auto !important;
+            height: auto !important;
+            max-width: 190px !important;
+            max-height: 100px !important;
+            object-fit: contain !important;
+            object-position: center center;
+            margin: 0 auto;
         }
 
         .hero-title {
@@ -124,8 +147,7 @@ if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
         logo_b64 = base64.b64encode(image_file.read()).decode()
     logo_html = (
-        f'<img src="data:image/png;base64,{logo_b64}" '
-        'style="max-width: 150px; width: 100%; height: auto; margin-bottom: 4px;">'
+        f'<div class="logo-wrap"><img src="data:image/png;base64,{logo_b64}" alt="Logo NIP"></div>'
     )
 
 st.markdown(
