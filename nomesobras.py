@@ -180,13 +180,9 @@ with c1:
     sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
     
     solicitacoes = []
-    solicitacoes_ordem_colada = []
     notas_removidas = []
     
     if sols_input and sols_input.strip():
-        # IMPORTANTE: ``parts`` preserva exatamente a ordem em que as notas
-        # foram coladas no campo SOLICITAÇÕES. Essa ordem é a referência
-        # obrigatória quando NOTAS ASSOCIADAS estiver desmarcada.
         parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
         
         # === NOVO: QUADRO LIST/SISCO GERADO AUTOMATICAMENTE ===
@@ -217,32 +213,25 @@ with c1:
                 if pi_sol.lower() == 'nan': pi_sol = ""
                 notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
             
-        # Guarda a ordem original (já desconsiderando apenas notas CANC/FINL).
-        # Esta lista NÃO sofre qualquer reordenação.
-        solicitacoes_ordem_colada = [n['sol'] for n in notas_processadas]
-
         pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
         aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
 
-        if notas_associadas:
-            # CAIXINHA MARCADA: mantém a regra existente de priorizar TR.
-            if aplicar_regra_tr:
-                tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
-                outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
-
-                if tr_notes:
-                    escolhida_tr = random.choice(tr_notes)
-                    tr_notes.remove(escolhida_tr)
-                    solicitacoes = [escolhida_tr] + tr_notes + outras_notes
-                else:
-                    solicitacoes = solicitacoes_ordem_colada.copy()
+        # A priorização da obra trifásica só deve ocorrer quando
+        # a opção NOTAS ASSOCIADAS estiver marcada.
+        # Com a opção desmarcada, preserva exatamente a ordem
+        # em que as solicitações foram coladas pelo usuário.
+        if notas_associadas and aplicar_regra_tr:
+            tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
+            outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
+            
+            if tr_notes:
+                escolhida_tr = random.choice(tr_notes)
+                tr_notes.remove(escolhida_tr)
+                solicitacoes = [escolhida_tr] + tr_notes + outras_notes
             else:
-                solicitacoes = solicitacoes_ordem_colada.copy()
+                solicitacoes = [n['sol'] for n in notas_processadas]
         else:
-            # CAIXINHA DESMARCADA: a primeira nota colada é SEMPRE a principal
-            # e toda a saída (DADOS, SGO, DESCRIÇÕES e NOMES DAS OBRAS) segue
-            # exatamente a mesma ordem do campo SOLICITAÇÕES.
-            solicitacoes = solicitacoes_ordem_colada.copy()
+            solicitacoes = [n['sol'] for n in notas_processadas]
             
     if notas_removidas:
         st.markdown('<div class="eh-yellow" style="margin-top: 15px; background-color: #fef2f2; color: #991b1b; border-color: #fca5a5;">⚠️ OBRAS CANCELADAS / FINALIZADAS</div>', unsafe_allow_html=True)
