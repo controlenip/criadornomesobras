@@ -243,9 +243,9 @@ html_doc = r'''<!doctype html>
 .report-table{width:762px;margin-left:20px;border-collapse:collapse;table-layout:fixed;font-family:Calibri,Arial,sans-serif;color:#000}
 .report-table td{padding:0;vertical-align:middle;overflow:hidden}
 .top-bg,.top-logo,.top-title{background:#17375E;color:#fff;border:0}
-.top-logo{position:relative;text-align:center;border-right:2.25pt solid #fff}
-.top-logo img{width:142px;height:48px;object-fit:contain;display:block;margin:0 auto}
-.top-title{text-align:center;font-size:18pt;font-weight:700;line-height:1;white-space:nowrap}
+.top-logo{position:relative;text-align:center!important;vertical-align:middle!important;border-right:2.25pt solid #fff;height:51pt}
+.top-logo img{max-width:142px;max-height:42px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0;vertical-align:middle}
+.top-title{text-align:center!important;vertical-align:middle!important;font-size:18pt;font-weight:700;line-height:1.05;white-space:nowrap;height:51pt;padding:0!important}
 .blank-row td{border:0!important;background:#fff}
 .section-label,.section-fill{background:#24465F;color:#fff;border-top:1px solid #24465F;border-bottom:1px solid #24465F;font-size:10pt;font-weight:700}
 .section-label{border-left:1px solid #24465F;text-align:center}.section-fill{border-right:1px solid #24465F}
@@ -293,9 +293,7 @@ html_doc = r'''<!doctype html>
 <div class="top-space"></div>
 <table class="report-table" aria-label="Formulário de Não Atendimento Expansão">
 <colgroup><col style="width:123px"><col style="width:83px"><col style="width:94px"><col style="width:93px"><col style="width:77px"><col style="width:140px"><col style="width:76px"><col style="width:76px"></colgroup>
-<tr style="height:12.75pt"><td class="top-logo" rowspan="3" colspan="2"><img src="data:image/png;base64,__LOGO__" alt="Grupo Equatorial Energia"></td><td class="top-bg" colspan="6"></td></tr>
-<tr style="height:23.25pt"><td class="top-title" colspan="5">Formulário de Não Atendimento Expansão</td><td class="top-bg"></td></tr>
-<tr style="height:12.75pt"><td class="top-bg" colspan="6"></td></tr>
+<tr style="height:51pt"><td class="top-logo" colspan="2"><img src="data:image/png;base64,__LOGO__" alt="Grupo Equatorial Energia"></td><td class="top-title" colspan="6">Formulário de Não Atendimento Expansão</td></tr>
 <tr class="blank-row" style="height:12.75pt"><td colspan="8"></td></tr>
 <tr style="height:20.25pt"><td class="lbl-cell">Distribuidora:</td><td class="value-cell select-cell"><select id="distribuidora" class="fs"><option>EQTL MA</option><option>EQTL PA</option><option>EQTL PI</option><option>EQTL AL</option></select></td><td class="spacer-cell"></td><td class="lbl-cell">Regional:</td><td class="value-cell select-cell"><select id="regional" class="fs"><option value=""></option><option>CENTRO</option><option>LESTE</option><option>METROPOLITANA</option><option>NORDESTE</option><option>NOROESTE</option><option>NORTE</option><option>OESTE</option><option>SUL</option></select></td><td class="spacer-cell"></td><td class="lbl-cell lbl-small">Data da<br>solicitação:</td><td class="value-cell"><input id="data_solicitacao" class="fi" type="text"></td></tr>
 <tr class="blank-row" style="height:12.75pt"><td colspan="8"></td></tr>
