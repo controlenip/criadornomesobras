@@ -34,9 +34,21 @@ st.markdown("""
     .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 80px; height: auto; white-space: pre-wrap; line-height: 1.4; border-radius: 0 0 4px 4px;}
     
     .list-box { background-color: white; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0f172a; white-space: pre-wrap; line-height: 1.8; border-radius: 0 0 4px 4px; min-height: 150px; height: auto; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
-    .nome-obra-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; line-height: 1.8; }
-    .nome-obra-texto { flex: 1; min-width: 0; }
-    .nome-obra-contador { flex: 0 0 auto; color: #64748b; font-size: 10px; font-weight: 700; text-transform: none; white-space: nowrap; padding-left: 8px; }
+    .contador-externo {
+        margin-top: 4px;
+        padding: 4px 8px;
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        color: #64748b;
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        font-weight: 700;
+        line-height: 1.5;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+    }
     
     .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
     div[data-baseweb="select"] > div { border: 1px solid #cbd5e1; border-radius: 4px; min-height: 35px !important; height: 35px !important; font-size: 11px; background-color: white;}
@@ -607,17 +619,17 @@ with c4:
     
     st.markdown('<div class="eh" style="margin-top: 15px;">🚧 NOMES DAS OBRAS 🚧</div>', unsafe_allow_html=True)
 
-    # Contador visual de caracteres por nome. O contador não altera o conteúdo
-    # de nomes_obras_list nem participa do limite de 41 caracteres.
-    if nomes_obras_list:
-        nomes_html_final = "".join(
-            f'<div class="nome-obra-row">'
-            f'<span class="nome-obra-texto">{nome}</span>'
-            f'<span class="nome-obra-contador">{len(str(nome))}/41</span>'
-            f'</div>'
-            for nome in nomes_obras_list
-        )
-    else:
-        nomes_html_final = ""
-
+    # Os nomes ficam sozinhos no quadro para permitir copiar/colar sem levar
+    # o contador junto. O contador é exibido em uma área separada e não selecionável.
+    nomes_html_final = "<br>".join(str(nome) for nome in nomes_obras_list) if nomes_obras_list else ""
     st.markdown(f'<div class="list-box">{nomes_html_final}</div>', unsafe_allow_html=True)
+
+    if nomes_obras_list:
+        contagens_html = " &nbsp;•&nbsp; ".join(
+            f'{idx + 1}: {len(str(nome))}/41'
+            for idx, nome in enumerate(nomes_obras_list)
+        )
+        st.markdown(
+            f'<div class="contador-externo">CARACTERES — {contagens_html}</div>',
+            unsafe_allow_html=True
+        )
