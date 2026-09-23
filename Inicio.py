@@ -142,18 +142,22 @@ st.markdown(
 # ==========================================
 # LOGO / CABEÇALHO
 # ==========================================
-logo_html = ""
+# A logo abaixo usa exatamente o mesmo padrão da página CRIAR SGO,
+# evitando qualquer recorte causado por contêineres com altura limitada.
+st.markdown("<br>", unsafe_allow_html=True)
 if os.path.exists("LOGO_NIP.png"):
     with open("LOGO_NIP.png", "rb") as image_file:
-        logo_b64 = base64.b64encode(image_file.read()).decode()
-    logo_html = (
-        f'<div class="logo-wrap"><img src="data:image/png;base64,{logo_b64}" alt="Logo NIP"></div>'
-    )
+        b64_logo = base64.b64encode(image_file.read()).decode()
+
+    st.markdown(f'''
+        <div style="text-align: center; margin-bottom: 10px;">
+            <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
+        </div>
+    ''', unsafe_allow_html=True)
 
 st.markdown(
-    f"""
+    """
     <div class="hero">
-        {logo_html}
         <div class="hero-title">Sistema de Obras</div>
         <p class="hero-subtitle">Acesso rápido às ferramentas de criação de SGO e relatório de expurgo.</p>
     </div>
