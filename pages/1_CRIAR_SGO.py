@@ -57,6 +57,8 @@ def limpar_campos_manuais():
             st.session_state[chave] = ""
     if "text_area_obras" in st.session_state:
         st.session_state["text_area_obras"] = ""
+    if "notas_vu" in st.session_state:
+        st.session_state["notas_vu"] = False
 
 def remover_acentos(texto):
     if pd.isna(texto) or texto == "": return ""
@@ -175,6 +177,7 @@ with c1:
     
     st.markdown("<div style='padding: 8px 0px;'>", unsafe_allow_html=True)
     notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
+    notas_vu = st.checkbox("NOTAS VU (VISITA ÚNICA)", value=False, key="notas_vu")
     st.markdown("</div>", unsafe_allow_html=True)
     
     sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
@@ -445,6 +448,22 @@ if not area_resp: area_resp = ""
 # ==========================================
 # 5. GERADOR EM MASSA DOS NOMES E DESCRIÇÕES
 # ==========================================
+def aplicar_marcacao_vu(nome_obra, solicitacao):
+    """
+    Acrescenta VU- somente no nome exibido em NOMES DAS OBRAS.
+    Ex.: CT-UNI-BDC-NS-1114165710-LEONARDO
+      -> CT-UNI-BDC-NS-1114165710-VU-LEONARDO
+    Não altera Obra Relâmpago, descrições SGO ou demais dados.
+    """
+    if not notas_vu or not nome_obra or not solicitacao:
+        return nome_obra
+
+    marcador = f"-{solicitacao}-"
+    if marcador in nome_obra and f"-{solicitacao}-VU-" not in nome_obra:
+        return nome_obra.replace(marcador, f"-{solicitacao}-VU-", 1)
+
+    return nome_obra
+
 pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
 pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
 pref_pi = pi_ativo if pi_ativo else "UNR"
@@ -465,7 +484,8 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
     
     descricoes_list.append(desc_str)
-    nomes_obras_list.append(obra_relampago_formatada)
+    nome_lista_manual = aplicar_marcacao_vu(obra_relampago_formatada, val_sol_final)
+    nomes_obras_list.append(nome_lista_manual)
 else:
     for idx, sol in enumerate(solicitacoes):
         res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
@@ -522,7 +542,8 @@ else:
         if notas_associadas and idx > 0:
             pass 
         else:
-            nomes_obras_list.append(nome_str)
+            nome_para_lista = aplicar_marcacao_vu(nome_str, sol)
+            nomes_obras_list.append(nome_para_lista)
 
 # ==========================================
 # 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
