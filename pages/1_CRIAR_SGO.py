@@ -506,7 +506,7 @@ if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol
     
     raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
     clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
-    obra_relampago_formatada = clean_name[:34].upper()
+    obra_relampago_formatada = clean_name[:40].upper()
     
     fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT", "B"] else f"(FASE {fase})"
     desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
@@ -556,7 +556,7 @@ else:
             
             raw_name = f"{pref_especial}{pref_tipo_loop}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
             clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
-            nome_str = clean_name[:34].upper()
+            nome_str = clean_name[:40].upper()
             
             if idx == 0:
                 obra_relampago_formatada = nome_str
