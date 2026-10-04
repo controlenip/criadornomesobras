@@ -345,7 +345,9 @@ def carregar_e_cruzar_obras():
         df_invalidas = df_obras[~mask_valid_coords].copy()
         df_obras = df_obras[mask_valid_coords]
         
-        mask_concluida = df_obras[status_sisco_col].astype(str).str.contains('CONCLU', case=False, na=False)
+        # Regra oficial deste fluxo: obra concluída é definida por STATUS LIST = CONCLUIDO.
+        status_list_norm = df_obras[status_list_col].apply(lambda x: remove_accents(str(x)).upper().strip())
+        mask_concluida = status_list_norm.str.contains('CONCLUID', case=False, na=False)
         df_concluidas = df_obras[mask_concluida].copy()
         
         def normalizar(x): return remove_accents(str(x)).upper().strip()
@@ -395,6 +397,21 @@ def obter_radar_chuva_url():
 # 2. ESTRUTURA DA TELA E CONTAINERS
 # ==========================================
 st.markdown("<h2 style='color: #0D256C;'>🗺️ Gestão de Malha Elétrica e Obras (Inteligência Geográfica)</h2>", unsafe_allow_html=True)
+
+# Foco opcional recebido da página CRIAR SGO.
+# Quando existe conflito em até 50 m, a página já abre enquadrando as obras envolvidas.
+foco_mapa_sgo = st.session_state.get("foco_mapa_conflito")
+if foco_mapa_sgo and foco_mapa_sgo.get('conflitos'):
+    conflitos_recebidos = foco_mapa_sgo.get('conflitos', [])
+    obras_recebidas = foco_mapa_sgo.get('obras_digitadas', [])
+    menor_distancia = min(float(x.get('distancia_m', 999999)) for x in conflitos_recebidos)
+    st.error(
+        f"🚨 Conflito recebido do CRIAR SGO: {len(obras_recebidas)} solicitação(ões) "
+        f"com obra concluída em até 50 m. Menor distância: {menor_distancia:.1f} m."
+    )
+    if st.button("↩️ Limpar foco do CRIAR SGO", key="limpar_foco_sgo_mapa"):
+        st.session_state.pop("foco_mapa_conflito", None)
+        st.rerun()
 
 kpi_container = st.container()
 map_container = st.container()
@@ -576,7 +593,7 @@ with st.sidebar:
         mostrar_streetview = st.checkbox("🛣️ Cobertura Street View", value=False)
         
         msg_obras, df_concluidas, df_andamento, df_invalidas = "OK", None, None, None
-        if mostrar_concluidas or mostrar_conflitantes or mostrar_heatmap or mostrar_todas_obras:
+        if mostrar_concluidas or mostrar_conflitantes or mostrar_heatmap or mostrar_todas_obras or bool(foco_mapa_sgo):
             msg_obras, df_concluidas, df_andamento, df_invalidas = carregar_e_cruzar_obras()
             if msg_obras != "OK": st.sidebar.warning(f"⚠️ {msg_obras}")
             else:
@@ -1067,6 +1084,99 @@ if mostrar_clima:
     if not url_chuva and not url_nuvem:
         st.sidebar.warning("⚠️ Serviço de radar climático temporariamente indisponível na API central.")
 
+# ==========================================
+# FOCO AUTOMÁTICO RECEBIDO DO CRIAR SGO
+# ==========================================
+coords_foco_sgo = []
+if foco_mapa_sgo and foco_mapa_sgo.get('conflitos'):
+    fg_foco = folium.FeatureGroup(name="🚨 Conflito vindo do CRIAR SGO", show=True)
+    conflitos_foco = foco_mapa_sgo.get('conflitos', [])
+
+    # Evita repetir a mesma solicitação quando ela possui mais de uma concluída próxima.
+    novas_desenhadas = set()
+    concluidas_desenhadas = set()
+
+    for item in conflitos_foco:
+        obra_nova = str(item.get('obra_nova', ''))
+        lat_nova = float(item.get('lat_nova'))
+        lon_nova = float(item.get('lon_nova'))
+        obra_conc = str(item.get('obra_concluida', ''))
+        lat_conc = float(item.get('lat_concluida'))
+        lon_conc = float(item.get('lon_concluida'))
+        dist_m = float(item.get('distancia_m', 0.0))
+        nome_nova = html.escape(str(item.get('nome_nova', '')))
+        nome_conc = html.escape(str(item.get('nome_concluida', '')))
+        mun_nova = html.escape(str(item.get('municipio_nova', '')))
+        mun_conc = html.escape(str(item.get('municipio_concluida', '')))
+        status_conc = html.escape(str(item.get('status_list_concluida', 'CONCLUIDO')))
+
+        chave_nova = (obra_nova, round(lat_nova, 7), round(lon_nova, 7))
+        if chave_nova not in novas_desenhadas:
+            novas_desenhadas.add(chave_nova)
+            coords_foco_sgo.append([lat_nova, lon_nova])
+            popup_nova = f"""
+            <div style='min-width:260px;font-family:sans-serif;'>
+                <h4 style='margin:0 0 8px;color:#f97316;'>🟠 SOLICITAÇÃO CONSULTADA</h4>
+                <b>Obra:</b> {html.escape(obra_nova)}<br>
+                <b>Nome:</b> {nome_nova or '-'}<br>
+                <b>Município:</b> {mun_nova or '-'}<br>
+                <b>Coordenadas:</b> {lat_nova:.6f}, {lon_nova:.6f}
+            </div>
+            """
+            folium.Marker(
+                [lat_nova, lon_nova],
+                icon=folium.Icon(color='orange', icon='map-pin', prefix='fa'),
+                tooltip=f"Solicitação {obra_nova}",
+                popup=folium.Popup(popup_nova, max_width=320)
+            ).add_to(fg_foco)
+            folium.Circle(
+                [lat_nova, lon_nova],
+                radius=float(foco_mapa_sgo.get('raio_m', 50.0)),
+                color='#f97316',
+                weight=2,
+                fill=True,
+                fill_color='#f97316',
+                fill_opacity=0.08,
+                tooltip='Raio de verificação: 50 m'
+            ).add_to(fg_foco)
+
+        chave_conc = (obra_conc, round(lat_conc, 7), round(lon_conc, 7))
+        if chave_conc not in concluidas_desenhadas:
+            concluidas_desenhadas.add(chave_conc)
+            coords_foco_sgo.append([lat_conc, lon_conc])
+            popup_conc = f"""
+            <div style='min-width:260px;font-family:sans-serif;'>
+                <h4 style='margin:0 0 8px;color:#2563eb;'>🔵 OBRA CONCLUÍDA PRÓXIMA</h4>
+                <b>Obra:</b> {html.escape(obra_conc)}<br>
+                <b>Status LIST:</b> {status_conc}<br>
+                <b>Nome:</b> {nome_conc or '-'}<br>
+                <b>Município:</b> {mun_conc or '-'}<br>
+                <b>Coordenadas:</b> {lat_conc:.6f}, {lon_conc:.6f}
+            </div>
+            """
+            folium.Marker(
+                [lat_conc, lon_conc],
+                icon=folium.Icon(color='blue', icon='check', prefix='fa'),
+                tooltip=f"Concluída {obra_conc}",
+                popup=folium.Popup(popup_conc, max_width=320)
+            ).add_to(fg_foco)
+
+        folium.PolyLine(
+            [[lat_nova, lon_nova], [lat_conc, lon_conc]],
+            color='#dc2626', weight=3, opacity=0.9, dash_array='6,5',
+            tooltip=f"{obra_nova} ↔ {obra_conc}: {dist_m:.1f} m"
+        ).add_to(fg_foco)
+
+        # Distância no meio da ligação.
+        lat_meio = (lat_nova + lat_conc) / 2.0
+        lon_meio = (lon_nova + lon_conc) / 2.0
+        folium.Marker(
+            [lat_meio, lon_meio],
+            icon=folium.DivIcon(html=f"<div style='background:white;border:1px solid #dc2626;border-radius:5px;padding:2px 5px;color:#991b1b;font-weight:bold;font-size:11px;white-space:nowrap;'>{dist_m:.1f} m</div>")
+        ).add_to(fg_foco)
+
+    fg_foco.add_to(mapa)
+
 folium.LayerControl(position='topright').add_to(mapa)
 
 # -------------------------------------------------------------
@@ -1105,7 +1215,21 @@ with table_container:
 # -------------------------------------------------------------
 # 6. GERENCIAMENTO DE ZOOM E RENDERIZAÇÃO FINAL DO MAPA
 # -------------------------------------------------------------
-if zoom_lat is not None and zoom_lon is not None:
+if coords_foco_sgo:
+    lats_foco = [p[0] for p in coords_foco_sgo]
+    lons_foco = [p[1] for p in coords_foco_sgo]
+    # Pequena margem garante que os dois pontos e o círculo de 50 m fiquem visíveis.
+    min_lat, max_lat = min(lats_foco), max(lats_foco)
+    min_lon, max_lon = min(lons_foco), max(lons_foco)
+    margem_lat = max(0.0006, (max_lat - min_lat) * 0.35)
+    margem_lon = max(0.0006, (max_lon - min_lon) * 0.35)
+    mapa.fit_bounds(
+        [[min_lat - margem_lat, min_lon - margem_lon], [max_lat + margem_lat, max_lon + margem_lon]],
+        padding_top_left=[35, 35],
+        padding_bottom_right=[35, 35],
+        max_zoom=19
+    )
+elif zoom_lat is not None and zoom_lon is not None:
     mapa.fit_bounds([[zoom_lat - 0.001, zoom_lon - 0.001], [zoom_lat + 0.001, zoom_lon + 0.001]])
 elif busca_lat is not None and busca_lon is not None:
     mapa.fit_bounds([[busca_lat - 0.001, busca_lon - 0.001], [busca_lat + 0.001, busca_lon + 0.001]])
