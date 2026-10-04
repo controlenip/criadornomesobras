@@ -6,6 +6,7 @@ import base64
 import re
 import random
 import datetime
+import math
 
 # ==========================================
 # 1. CONFIGURAÇÕES DA PÁGINA E CSS
@@ -76,6 +77,9 @@ def limpar_campos_manuais():
         st.session_state["notas_vu"] = False
     if "utilizar_notas_canc_finl" in st.session_state:
         st.session_state["utilizar_notas_canc_finl"] = False
+    # Limpa também o último foco enviado para a página do mapa.
+    st.session_state.pop("foco_mapa_conflito", None)
+    st.session_state.pop("conflitos_50m_sgo", None)
 
 def remover_acentos(texto):
     if pd.isna(texto) or texto == "": return ""
@@ -133,6 +137,111 @@ def carregar_dados(file_path, mtime):
         df_dados.columns = df_dados.columns.str.strip().str.upper()
     
     return pd.DataFrame(), df_notas, df_dados # Retornando DF vazio para SISCO, pois não é mais usado
+
+
+# ==========================================
+# VERIFICAÇÃO AUTOMÁTICA DE OBRAS CONCLUÍDAS EM RAIO DE 50 M
+# ==========================================
+def _coord_num(valor):
+    """Converte coordenadas vindas do Excel para float de forma tolerante."""
+    try:
+        if pd.isna(valor):
+            return None
+        txt = str(valor).strip().replace(',', '.')
+        if txt.lower() in ['', 'nan', 'none', 'null']:
+            return None
+        v = float(txt)
+        return v
+    except Exception:
+        return None
+
+
+def distancia_metros(lat1, lon1, lat2, lon2):
+    """Distância geodésica aproximada entre dois pontos, em metros."""
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2.0) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2.0) ** 2
+    a = min(1.0, max(0.0, a))
+    return 2.0 * r * math.asin(math.sqrt(a))
+
+
+def detectar_conflitos_concluidos_50m(df_base, protocolos, raio_m=50.0):
+    """
+    Para cada protocolo digitado em SOLICITAÇÕES, procura obras cuja coluna
+    STATUS LIST esteja como CONCLUIDO e que estejam a até `raio_m` metros.
+    Retorna uma lista com todos os pares encontrados.
+    """
+    if df_base is None or df_base.empty or not protocolos:
+        return []
+
+    obrigatorias = ['PROTOCOLO', 'STATUS LIST', 'LATITUDE', 'LONGITUDE']
+    if not all(c in df_base.columns for c in obrigatorias):
+        return []
+
+    base = df_base.copy()
+    base['PROTOCOLO'] = base['PROTOCOLO'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    base['_STATUS_LIST_NORM'] = base['STATUS LIST'].apply(remover_acentos).astype(str).str.upper().str.strip()
+    base['_LAT_CONFLITO'] = base['LATITUDE'].apply(_coord_num)
+    base['_LON_CONFLITO'] = base['LONGITUDE'].apply(_coord_num)
+
+    concluidas = base[
+        base['_STATUS_LIST_NORM'].str.contains('CONCLUID', na=False)
+        & base['_LAT_CONFLITO'].notna()
+        & base['_LON_CONFLITO'].notna()
+    ].copy()
+
+    if concluidas.empty:
+        return []
+
+    conflitos = []
+    protocolos_limpos = [str(p).strip() for p in protocolos if str(p).strip()]
+
+    for protocolo in protocolos_limpos:
+        atual = base[base['PROTOCOLO'] == protocolo]
+        if atual.empty:
+            continue
+
+        # Usa a primeira ocorrência válida da solicitação informada.
+        row_atual = None
+        for _, rr in atual.iterrows():
+            la = _coord_num(rr.get('LATITUDE'))
+            lo = _coord_num(rr.get('LONGITUDE'))
+            if la is not None and lo is not None and la != 0 and lo != 0:
+                row_atual = rr
+                lat_nova, lon_nova = la, lo
+                break
+        if row_atual is None:
+            continue
+
+        for _, rr in concluidas.iterrows():
+            protocolo_concluido = str(rr.get('PROTOCOLO', '')).strip()
+            # A própria nota não deve gerar conflito consigo mesma a 0 metro.
+            if protocolo_concluido == protocolo:
+                continue
+
+            lat_conc = float(rr['_LAT_CONFLITO'])
+            lon_conc = float(rr['_LON_CONFLITO'])
+            dist = distancia_metros(lat_nova, lon_nova, lat_conc, lon_conc)
+            if dist <= float(raio_m):
+                conflitos.append({
+                    'obra_nova': protocolo,
+                    'nome_nova': str(row_atual.get('NOME', row_atual.get('NOME DO SOLICITANTE', ''))).strip(),
+                    'municipio_nova': str(row_atual.get('MUNICIPIO', '')).strip(),
+                    'lat_nova': float(lat_nova),
+                    'lon_nova': float(lon_nova),
+                    'obra_concluida': protocolo_concluido,
+                    'nome_concluida': str(rr.get('NOME', rr.get('NOME DO SOLICITANTE', ''))).strip(),
+                    'municipio_concluida': str(rr.get('MUNICIPIO', '')).strip(),
+                    'lat_concluida': lat_conc,
+                    'lon_concluida': lon_conc,
+                    'status_list_concluida': str(rr.get('STATUS LIST', '')).strip(),
+                    'distancia_m': round(float(dist), 1),
+                })
+
+    conflitos.sort(key=lambda x: (str(x['obra_nova']), float(x['distancia_m'])))
+    return conflitos
 
 # ==========================================
 # 2. LOGO NO TOPO E DADOS PADRÃO
@@ -254,7 +363,64 @@ with c1:
                 solicitacoes = [n['sol'] for n in notas_processadas]
         else:
             solicitacoes = [n['sol'] for n in notas_processadas]
-            
+
+        # ------------------------------------------------------
+        # ALERTA AUTOMÁTICO: OBRA CONCLUÍDA EM ATÉ 50 METROS
+        # A verificação usa tudo que foi digitado no campo SOLICITAÇÕES,
+        # inclusive quando há várias notas coladas de uma vez.
+        # ------------------------------------------------------
+        conflitos_50m = detectar_conflitos_concluidos_50m(df_notas, parts, raio_m=50.0)
+        st.session_state["conflitos_50m_sgo"] = conflitos_50m
+
+        if conflitos_50m:
+            obras_afetadas = sorted(set(str(x['obra_nova']) for x in conflitos_50m))
+            menor_dist = min(float(x['distancia_m']) for x in conflitos_50m)
+
+            st.markdown(
+                '<div class="eh-yellow" style="margin-top:15px;background:#fff1f2;color:#991b1b;border-color:#f87171;">'
+                '🚨 CONFLITO GEOGRÁFICO — OBRA CONCLUÍDA EM ATÉ 50 m'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+            linhas_alerta = []
+            for item in conflitos_50m:
+                linhas_alerta.append(
+                    f"<div style='padding:6px 0;border-bottom:1px solid #fecaca;'>"
+                    f"<b>Solicitação {item['obra_nova']}</b> → "
+                    f"obra concluída <b>{item['obra_concluida']}</b> "
+                    f"a <b>{item['distancia_m']:.1f} m</b>"
+                    f"<br><span style='font-size:10px;color:#7f1d1d;'>"
+                    f"STATUS LIST: {item['status_list_concluida']}"
+                    f"{(' | ' + item['municipio_concluida']) if item['municipio_concluida'] else ''}"
+                    f"</span></div>"
+                )
+
+            st.markdown(
+                "<div class='list-box' style='min-height:60px;background:#fff7f7;color:#7f1d1d;'>"
+                + "".join(linhas_alerta)
+                + "</div>",
+                unsafe_allow_html=True
+            )
+            st.caption(
+                f"{len(obras_afetadas)} solicitação(ões) digitada(s) com conflito; "
+                f"{len(conflitos_50m)} ocorrência(s) concluída(s) encontrada(s). "
+                f"Menor distância: {menor_dist:.1f} m."
+            )
+
+            if st.button("🗺️ ABRIR CONFLITO NO MAPA", type="primary", use_container_width=True, key="abrir_conflito_mapa_sgo"):
+                st.session_state["foco_mapa_conflito"] = {
+                    'raio_m': 50.0,
+                    'obras_digitadas': obras_afetadas,
+                    'conflitos': conflitos_50m,
+                }
+                st.switch_page("pages/3_Mapa.py")
+        else:
+            st.session_state.pop("foco_mapa_conflito", None)
+            st.success("✅ Nenhuma obra com STATUS LIST = CONCLUIDO foi encontrada no raio de 50 m das solicitações informadas.")
+    else:
+        st.session_state.pop("conflitos_50m_sgo", None)
+
     if notas_removidas:
         st.markdown('<div class="eh-yellow" style="margin-top: 15px; background-color: #fef2f2; color: #991b1b; border-color: #fca5a5;">⚠️ OBRAS CANCELADAS / FINALIZADAS</div>', unsafe_allow_html=True)
         removidas_str = "<br>".join(notas_removidas)
