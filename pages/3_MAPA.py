@@ -397,7 +397,35 @@ def carregar_e_cruzar_obras():
             (df_obras['LAT_CLEAN'] >= -35.0) & (df_obras['LAT_CLEAN'] <= 5.0) & 
             (df_obras['LON_CLEAN'] >= -75.0) & (df_obras['LON_CLEAN'] <= -30.0)
         )
+        total_linhas_base = int(len(df_obras))
+        total_validas_coord = int(mask_valid_coords.sum())
         df_invalidas = df_obras[~mask_valid_coords].copy()
+
+        def motivo_coord_invalida(row):
+            lat = row.get('LAT_CLEAN')
+            lon = row.get('LON_CLEAN')
+            if pd.isna(lat) and pd.isna(lon):
+                return 'LATITUDE E LONGITUDE AUSENTES/INVÁLIDAS'
+            if pd.isna(lat):
+                return 'LATITUDE AUSENTE/INVÁLIDA'
+            if pd.isna(lon):
+                return 'LONGITUDE AUSENTE/INVÁLIDA'
+            if float(lat) == 0.0 and float(lon) == 0.0:
+                return 'COORDENADA ZERADA (0,0)'
+            if float(lat) == 0.0:
+                return 'LATITUDE ZERADA'
+            if float(lon) == 0.0:
+                return 'LONGITUDE ZERADA'
+            if not (-35.0 <= float(lat) <= 5.0) or not (-75.0 <= float(lon) <= -30.0):
+                return 'COORDENADA FORA DO TERRITÓRIO BRASILEIRO'
+            return 'COORDENADA INVÁLIDA'
+
+        if not df_invalidas.empty:
+            df_invalidas['MOTIVO DA INCONSISTÊNCIA'] = df_invalidas.apply(motivo_coord_invalida, axis=1)
+            df_invalidas['NÍVEL'] = 'ERRO FATAL'
+            df_invalidas['_TOTAL_LINHAS_BASE'] = total_linhas_base
+            df_invalidas['_TOTAL_VALIDAS_COORD'] = total_validas_coord
+
         df_obras = df_obras[mask_valid_coords]
         
         # Regra oficial deste fluxo: obra concluída é definida por STATUS LIST = CONCLUIDO.
@@ -1134,12 +1162,29 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(st
             areas_especiais = verificar_areas_da_obra(lat, lon)
             rede_prox = calcular_rede_proxima(lat, lon)
             
+            dist_conflito = float(row['DISTANCIA_CONFLITO'])
+            if dist_conflito <= 10:
+                severidade = '🔴 CRÍTICO'
+            elif dist_conflito <= 25:
+                severidade = '🟠 ALTO'
+            else:
+                severidade = '🟡 MÉDIO'
+
             dados_tabela_conflito.append({
-                "Protocolo (Nova)": protocolo, "Nome (Nova)": nome_nova,
-                "Conflito (Alvo)": row['PROTOCOLO_CONFLITO'], "Nome (Concluída)": nome_alvo,
-                "Distância (m)": f"{row['DISTANCIA_CONFLITO']:.1f}m", "Latitude": lat, "Longitude": lon,
-                "Google Maps": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}",
-                "Street View": sv_url
+                "Severidade": severidade,
+                "Protocolo (Nova)": protocolo,
+                "Nome (Nova)": nome_nova,
+                "STATUS LIST (Nova)": str(row.get('STATUS_LIST_NORM', '')).strip(),
+                "Município": str(row.get('MUNICIPIO_NORM', '')).strip(),
+                "Regional": str(row.get('REGIONAL_NORM', '')).strip(),
+                "Tipo Nota": str(row.get('TIPO NOTA', '')).strip(),
+                "Conflito (Concluída)": row['PROTOCOLO_CONFLITO'],
+                "Nome (Concluída)": nome_alvo,
+                "STATUS LIST (Concluída)": 'CONCLUÍDO',
+                "Distância (m)": round(dist_conflito, 2),
+                "Latitude": lat,
+                "Longitude": lon,
+                "Google Maps": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
             })
                 
             html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: red; border-bottom: 2px solid red; padding-bottom: 5px;">🚨 CONFLITO DETECTADO</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO (NOVA):</b></td><td>{html.escape(protocolo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME (NOVA):</b></td><td>{html.escape(nome_nova)}</td></tr><tr><td style='color: red; padding: 2px;'><b>CONFLITO COM:</b></td><td style='color: red;'>{html.escape(row['PROTOCOLO_CONFLITO'])} ({row['DISTANCIA_CONFLITO']:.1f}m)</td></tr><tr><td style='color: red; padding: 2px;'><b>NOME (CONCLUÍDA):</b></td><td style='color: red;'>{html.escape(nome_alvo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
@@ -1300,30 +1345,196 @@ zoom_lat, zoom_lon = None, None
 with table_container:
     if mostrar_conflitantes and msg_obras == "OK" and len(dados_tabela_conflito) > 0:
         st.markdown("---")
-        st.markdown(f"<h3 style='color: #d62728;'>🚨 Relatório de Obras Sobrepostas (Total: {len(dados_tabela_conflito)})</h3>", unsafe_allow_html=True)
-        st.markdown("As obras abaixo estão em andamento, mas encontram-se no raio de 50 metros de uma obra já dada como concluída.<br>💡 **DICA INTERATIVA:** Clique em qualquer linha da tabela abaixo para dar zoom exato na obra no mapa!", unsafe_allow_html=True)
-        
+        st.markdown("### 🚨 Conflitos Geográficos — Obras em até 50 m de Concluídas")
+        st.caption("Priorize os conflitos mais próximos. Selecione uma linha da tabela para centralizar a obra correspondente no mapa.")
+
         df_tabela = pd.DataFrame(dados_tabela_conflito)
+        df_tabela['Distância (m)'] = pd.to_numeric(df_tabela['Distância (m)'], errors='coerce').fillna(0.0)
+        df_tabela = df_tabela.sort_values(['Distância (m)', 'Protocolo (Nova)'], ascending=[True, True]).reset_index(drop=True)
+
+        total_conflitos = int(len(df_tabela))
+        qtd_criticos = int((df_tabela['Severidade'] == '🔴 CRÍTICO').sum())
+        qtd_concluidas_distintas = int(df_tabela['Conflito (Concluída)'].astype(str).nunique())
+        menor_dist = float(df_tabela['Distância (m)'].min()) if total_conflitos else 0.0
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Conflitos", f"{total_conflitos:,}".replace(',', '.'))
+        k2.metric("Críticos (≤ 10 m)", f"{qtd_criticos:,}".replace(',', '.'))
+        k3.metric("Concluídas envolvidas", f"{qtd_concluidas_distintas:,}".replace(',', '.'))
+        k4.metric("Menor distância", f"{menor_dist:.2f} m")
+
+        f1, f2, f3 = st.columns([1, 1, 1])
+        with f1:
+            op_reg = sorted([x for x in df_tabela['Regional'].dropna().astype(str).unique() if x and x != 'DESCONHECIDO'])
+            filtro_reg_confl = st.multiselect("Regional", op_reg, key="filtro_reg_conflitos")
+        with f2:
+            base_mun = df_tabela[df_tabela['Regional'].isin(filtro_reg_confl)] if filtro_reg_confl else df_tabela
+            op_mun = sorted([x for x in base_mun['Município'].dropna().astype(str).unique() if x and x != 'DESCONHECIDO'])
+            filtro_mun_confl = st.multiselect("Município", op_mun, key="filtro_mun_conflitos")
+        with f3:
+            filtro_sev = st.multiselect(
+                "Severidade",
+                ['🔴 CRÍTICO', '🟠 ALTO', '🟡 MÉDIO'],
+                key="filtro_sev_conflitos"
+            )
+
+        df_conf_view = df_tabela.copy()
+        if filtro_reg_confl:
+            df_conf_view = df_conf_view[df_conf_view['Regional'].isin(filtro_reg_confl)]
+        if filtro_mun_confl:
+            df_conf_view = df_conf_view[df_conf_view['Município'].isin(filtro_mun_confl)]
+        if filtro_sev:
+            df_conf_view = df_conf_view[df_conf_view['Severidade'].isin(filtro_sev)]
+
+        st.caption(f"Exibindo {len(df_conf_view)} de {total_conflitos} conflito(s).")
+
+        cols_conf = [
+            'Severidade', 'Protocolo (Nova)', 'Nome (Nova)', 'STATUS LIST (Nova)',
+            'Município', 'Regional', 'Tipo Nota', 'Conflito (Concluída)',
+            'Nome (Concluída)', 'STATUS LIST (Concluída)', 'Distância (m)',
+            'Latitude', 'Longitude', 'Google Maps'
+        ]
+        df_conf_view = df_conf_view[[c for c in cols_conf if c in df_conf_view.columns]].copy()
+
         try:
             event = st.dataframe(
-                df_tabela, use_container_width=True, on_select="rerun", selection_mode="single_row",
-                column_config={"Google Maps": st.column_config.LinkColumn("📍 Rota Geográfica", display_text="Abrir Maps"), "Street View": st.column_config.LinkColumn("👁️ Visão de Rua", display_text="Abrir 360º")}
+                df_conf_view,
+                use_container_width=True,
+                height=min(520, 80 + max(1, len(df_conf_view)) * 35),
+                on_select="rerun",
+                selection_mode="single_row",
+                hide_index=True,
+                column_config={
+                    "Distância (m)": st.column_config.NumberColumn("Distância (m)", format="%.2f m"),
+                    "Latitude": st.column_config.NumberColumn("Latitude", format="%.6f"),
+                    "Longitude": st.column_config.NumberColumn("Longitude", format="%.6f"),
+                    "Google Maps": st.column_config.LinkColumn("📍 Google Maps", display_text="Abrir Maps"),
+                }
             )
             if hasattr(event, 'selection') and event.selection.rows:
                 idx = event.selection.rows[0]
-                zoom_lat, zoom_lon = float(df_tabela.iloc[idx]['Latitude']), float(df_tabela.iloc[idx]['Longitude'])
-        except Exception: st.dataframe(df_tabela, use_container_width=True)
-        
-        csv = df_tabela.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(label="📥 Baixar Relatório (CSV)", data=csv, file_name="conflitos.csv", mime="text/csv", type="primary")
+                zoom_lat = float(df_conf_view.iloc[idx]['Latitude'])
+                zoom_lon = float(df_conf_view.iloc[idx]['Longitude'])
+        except Exception:
+            st.dataframe(df_conf_view, use_container_width=True, hide_index=True)
+
+        cdl1, cdl2 = st.columns([1, 1])
+        with cdl1:
+            csv = df_conf_view.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Baixar conflitos filtrados (CSV)",
+                data=csv,
+                file_name="conflitos_geograficos_filtrados.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with cdl2:
+            try:
+                buffer_xlsx = io.BytesIO()
+                with pd.ExcelWriter(buffer_xlsx, engine='openpyxl') as writer:
+                    df_conf_view.to_excel(writer, sheet_name='Conflitos', index=False)
+                    resumo_conf = pd.DataFrame({
+                        'Indicador': ['Conflitos', 'Críticos até 10 m', 'Concluídas distintas', 'Menor distância (m)'],
+                        'Valor': [total_conflitos, qtd_criticos, qtd_concluidas_distintas, round(menor_dist, 2)]
+                    })
+                    resumo_conf.to_excel(writer, sheet_name='Resumo', index=False)
+                st.download_button(
+                    label="📊 Baixar conflitos (Excel)",
+                    data=buffer_xlsx.getvalue(),
+                    file_name="conflitos_geograficos.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            except Exception as exc:
+                st.caption(f"Excel indisponível: {exc}")
 
     if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel)) and msg_obras == "OK":
         if df_invalidas is not None and not df_invalidas.empty:
             st.markdown("---")
-            with st.expander(f"⚠️ Monitor de Qualidade de Dados ({len(df_invalidas)} Inconsistências na Planilha)"):
-                st.markdown("As obras abaixo foram **ignoradas no mapa** porque estão com o GPS em branco, zerado (0,0) ou fora do território brasileiro. Corrija na planilha SISCO para que elas sejam processadas.")
-                cols_to_show = [c for c in ['PROTOCOLO', 'TIPO NOTA', 'MUNICIPIO', 'LATITUDE', 'LONGITUDE', 'STATUS SISCO'] if c in df_invalidas.columns]
-                st.dataframe(df_invalidas[cols_to_show], use_container_width=True)
+
+            total_base = int(df_invalidas['_TOTAL_LINHAS_BASE'].iloc[0]) if '_TOTAL_LINHAS_BASE' in df_invalidas.columns else len(df_invalidas)
+            total_validas = int(df_invalidas['_TOTAL_VALIDAS_COORD'].iloc[0]) if '_TOTAL_VALIDAS_COORD' in df_invalidas.columns else max(0, total_base - len(df_invalidas))
+            perc_validas = (total_validas / total_base * 100.0) if total_base else 0.0
+
+            with st.expander(f"⚠️ Monitor de Qualidade de Dados — {len(df_invalidas):,} inconsistência(s)".replace(',', '.'), expanded=False):
+                st.markdown("#### Qualidade das coordenadas da base")
+                st.caption("Registros desta seção foram ignorados no mapa porque a coordenada não permite posicionamento geográfico confiável.")
+
+                q1, q2, q3 = st.columns(3)
+                q1.metric("Inconsistências", f"{len(df_invalidas):,}".replace(',', '.'))
+                q2.metric("Coordenadas válidas", f"{total_validas:,}".replace(',', '.'))
+                q3.metric("Qualidade geográfica", f"{perc_validas:.1f}%")
+
+                resumo_motivos = (
+                    df_invalidas['MOTIVO DA INCONSISTÊNCIA']
+                    .fillna('NÃO IDENTIFICADO')
+                    .value_counts()
+                    .rename_axis('Motivo')
+                    .reset_index(name='Quantidade')
+                )
+
+                st.markdown("##### 📌 Resumo por motivo")
+                st.dataframe(resumo_motivos, use_container_width=True, hide_index=True)
+
+                fq1, fq2, fq3 = st.columns(3)
+                with fq1:
+                    op_mot = resumo_motivos['Motivo'].tolist()
+                    filtro_motivo = st.multiselect("Motivo", op_mot, key="filtro_motivo_qd")
+                with fq2:
+                    mun_col_q = next((c for c in ['MUNICIPIO', 'MUNICÍPIO', 'MUNICIPIO_NORM'] if c in df_invalidas.columns), None)
+                    op_mun_q = sorted(df_invalidas[mun_col_q].dropna().astype(str).unique().tolist()) if mun_col_q else []
+                    filtro_mun_q = st.multiselect("Município", op_mun_q, key="filtro_mun_qd")
+                with fq3:
+                    status_col_q = next((c for c in df_invalidas.columns if 'STATUS SISCO' in str(c).upper()), None)
+                    op_status_q = sorted(df_invalidas[status_col_q].dropna().astype(str).unique().tolist()) if status_col_q else []
+                    filtro_status_q = st.multiselect("STATUS SISCO", op_status_q, key="filtro_status_qd")
+
+                df_q = df_invalidas.copy()
+                if filtro_motivo:
+                    df_q = df_q[df_q['MOTIVO DA INCONSISTÊNCIA'].isin(filtro_motivo)]
+                if filtro_mun_q and mun_col_q:
+                    df_q = df_q[df_q[mun_col_q].astype(str).isin(filtro_mun_q)]
+                if filtro_status_q and status_col_q:
+                    df_q = df_q[df_q[status_col_q].astype(str).isin(filtro_status_q)]
+
+                cols_preferidas = [
+                    'PROTOCOLO', 'TIPO NOTA', 'MUNICIPIO', 'MUNICÍPIO', 'REGIONAL_NORM',
+                    'LATITUDE', 'LONGITUDE', 'STATUS SISCO', 'STATUS LIST',
+                    'MOTIVO DA INCONSISTÊNCIA', 'NÍVEL'
+                ]
+                cols_to_show = []
+                for c in cols_preferidas:
+                    if c in df_q.columns and c not in cols_to_show:
+                        cols_to_show.append(c)
+
+                st.caption(f"Exibindo {len(df_q)} de {len(df_invalidas)} inconsistência(s).")
+                st.dataframe(df_q[cols_to_show], use_container_width=True, height=420, hide_index=True)
+
+                qd1, qd2 = st.columns(2)
+                with qd1:
+                    csv_q = df_q[cols_to_show].to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        "📥 Baixar inconsistências filtradas (CSV)",
+                        data=csv_q,
+                        file_name="inconsistencias_coordenadas.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                with qd2:
+                    try:
+                        buffer_q = io.BytesIO()
+                        with pd.ExcelWriter(buffer_q, engine='openpyxl') as writer:
+                            df_q[cols_to_show].to_excel(writer, sheet_name='Inconsistencias', index=False)
+                            resumo_motivos.to_excel(writer, sheet_name='Resumo_por_Motivo', index=False)
+                        st.download_button(
+                            "📊 Baixar inconsistências (Excel)",
+                            data=buffer_q.getvalue(),
+                            file_name="monitor_qualidade_dados.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    except Exception as exc:
+                        st.caption(f"Excel indisponível: {exc}")
 
 # -------------------------------------------------------------
 # 6. GERENCIAMENTO DE ZOOM E RENDERIZAÇÃO FINAL DO MAPA
