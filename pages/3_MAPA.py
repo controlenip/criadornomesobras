@@ -411,23 +411,37 @@ def carregar_e_cruzar_obras():
         mask_andamento = df_obras['STATUS_LIST_NORM'].isin(status_alvos)
         df_andamento = df_obras[mask_andamento & (~mask_concluida)].copy()
         
-        df_andamento['CONFLITO'], df_andamento['PROTOCOLO_CONFLITO'], df_andamento['DISTANCIA_CONFLITO'], df_andamento['NOME_CONCLUIDA'] = False, "", 0.0, ""
+        df_andamento['CONFLITO'] = False
+        df_andamento['PROTOCOLO_CONFLITO'] = ""
+        df_andamento['DISTANCIA_CONFLITO'] = 0.0
+        df_andamento['NOME_CONCLUIDA'] = ""
+        df_andamento['LAT_CONCLUIDA_CONFLITO'] = float('nan')
+        df_andamento['LON_CONCLUIDA_CONFLITO'] = float('nan')
         
         if not df_concluidas.empty and not df_andamento.empty:
             pts_concluidas = [latlon_to_xyz(row['LAT_CLEAN'], row['LON_CLEAN']) for _, row in df_concluidas.iterrows()]
             arvore_kdtree = cKDTree(pts_concluidas)
-            c_flags, c_protos, c_dists, c_nomes = [], [], [], []
+            c_flags, c_protos, c_dists, c_nomes, c_lats, c_lons = [], [], [], [], [], []
             for _, row in df_andamento.iterrows():
                 xyz = latlon_to_xyz(row['LAT_CLEAN'], row['LON_CLEAN'])
                 _, idx_mais_proximo = arvore_kdtree.query(xyz)
                 obra_concluida_proxima = df_concluidas.iloc[idx_mais_proximo]
-                distancia_exata_m = haversine(row['LAT_CLEAN'], row['LON_CLEAN'], obra_concluida_proxima['LAT_CLEAN'], obra_concluida_proxima['LON_CLEAN']) * 1000
+                lat_conc = float(obra_concluida_proxima['LAT_CLEAN'])
+                lon_conc = float(obra_concluida_proxima['LON_CLEAN'])
+                distancia_exata_m = haversine(row['LAT_CLEAN'], row['LON_CLEAN'], lat_conc, lon_conc) * 1000
                 if distancia_exata_m <= 50:
                     c_flags.append(True); c_protos.append(str(obra_concluida_proxima.get('PROTOCOLO', 'S/N')))
                     c_dists.append(distancia_exata_m); c_nomes.append(str(obra_concluida_proxima.get('NOME', 'S/N')))
+                    c_lats.append(lat_conc); c_lons.append(lon_conc)
                 else:
                     c_flags.append(False); c_protos.append(""); c_dists.append(0.0); c_nomes.append("")
-            df_andamento['CONFLITO'], df_andamento['PROTOCOLO_CONFLITO'], df_andamento['DISTANCIA_CONFLITO'], df_andamento['NOME_CONCLUIDA'] = c_flags, c_protos, c_dists, c_nomes
+                    c_lats.append(float('nan')); c_lons.append(float('nan'))
+            df_andamento['CONFLITO'] = c_flags
+            df_andamento['PROTOCOLO_CONFLITO'] = c_protos
+            df_andamento['DISTANCIA_CONFLITO'] = c_dists
+            df_andamento['NOME_CONCLUIDA'] = c_nomes
+            df_andamento['LAT_CONCLUIDA_CONFLITO'] = c_lats
+            df_andamento['LON_CONCLUIDA_CONFLITO'] = c_lons
             
         return "OK", df_concluidas, df_andamento, df_invalidas
     except Exception as e: return f"Erro processando dados: {str(e)}", None, None, None
@@ -1089,25 +1103,48 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras) and msg_o
                 
             html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: red; border-bottom: 2px solid red; padding-bottom: 5px;">🚨 CONFLITO DETECTADO</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO (NOVA):</b></td><td>{html.escape(protocolo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME (NOVA):</b></td><td>{html.escape(nome_nova)}</td></tr><tr><td style='color: red; padding: 2px;'><b>CONFLITO COM:</b></td><td style='color: red;'>{html.escape(row['PROTOCOLO_CONFLITO'])} ({row['DISTANCIA_CONFLITO']:.1f}m)</td></tr><tr><td style='color: red; padding: 2px;'><b>NOME (CONCLUÍDA):</b></td><td style='color: red;'>{html.escape(nome_alvo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
 
-            # Círculo operacional de 50 m ao redor da obra em conflito.
-            # Este bloco fica no fluxo padrão de OBRAS CONFLITANTES, portanto
-            # aparece mesmo quando o mapa não foi aberto pelo botão do CRIAR SGO.
-            folium.Circle(
-                location=[lat, lon],
-                radius=50.0,
-                color='#ff0000',
-                weight=4,
-                opacity=1.0,
-                fill=True,
-                fill_color='#ff0000',
-                fill_opacity=0.10,
-                tooltip=f"Raio de conflito: 50 m — {html.escape(protocolo)}",
-                pane='overlayPane'
-            ).add_to(fg_andamento)
+            # O raio de 50 m pertence à OBRA CONCLUÍDA (azul), pois é ela
+            # que define a área onde uma nova solicitação gera conflito.
+            lat_conc = row.get('LAT_CONCLUIDA_CONFLITO')
+            lon_conc = row.get('LON_CONCLUIDA_CONFLITO')
+            if pd.notna(lat_conc) and pd.notna(lon_conc):
+                lat_conc, lon_conc = float(lat_conc), float(lon_conc)
+                protocolo_conc = str(row.get('PROTOCOLO_CONFLITO', 'S/N'))
 
+                # Círculo não interativo: não bloqueia o clique no marcador azul.
+                folium.Circle(
+                    location=[lat_conc, lon_conc],
+                    radius=50.0,
+                    color='#ff0000',
+                    weight=4,
+                    opacity=1.0,
+                    fill=True,
+                    fill_color='#ff0000',
+                    fill_opacity=0.10,
+                    interactive=False
+                ).add_to(fg_andamento)
+
+                popup_concluida = f"""
+                <div style='min-width:250px;font-family:sans-serif;'>
+                    <h4 style='margin-top:0;color:#1f77b4;border-bottom:2px solid #1f77b4;padding-bottom:5px;'>✅ OBRA CONCLUÍDA</h4>
+                    <b>PROTOCOLO:</b> {html.escape(protocolo_conc)}<br>
+                    <b>NOME:</b> {html.escape(nome_alvo)}<br>
+                    <b>STATUS LIST:</b> CONCLUÍDO<br>
+                    <b>COORDENADAS:</b> {lat_conc:.6f}, {lon_conc:.6f}<br>
+                    <b>RAIO DE CONFLITO:</b> 50 m
+                </div>
+                """
+                folium.CircleMarker(
+                    location=[lat_conc, lon_conc], radius=7, color='black', weight=1,
+                    fill=True, fill_color='#1f77b4', fill_opacity=1.0,
+                    tooltip=f"Concluída: {html.escape(protocolo_conc)}",
+                    popup=folium.Popup(popup_concluida, max_width=320)
+                ).add_to(fg_andamento)
+
+            # A solicitação em conflito permanece vermelha e clicável.
             folium.CircleMarker(
                 location=[lat, lon], radius=6, color='black', weight=1,
-                fill=True, fillColor='red', fillOpacity=0.9,
+                fill=True, fill_color='red', fill_opacity=0.9,
                 tooltip=f"Conflito: {html.escape(protocolo)}",
                 popup=folium.Popup(html_popup, max_width=350)
             ).add_to(fg_andamento)
@@ -1158,32 +1195,6 @@ if foco_mapa_sgo and foco_mapa_sgo.get('conflitos'):
                 tooltip=f"Solicitação {obra_nova}",
                 popup=folium.Popup(popup_nova, max_width=320)
             ).add_to(fg_foco)
-            # CÍRCULO VISUAL FIXO DE 50 METROS EM TORNO DA SOLICITAÇÃO
-            # Mantido propositalmente com contraste alto para ficar visível também
-            # sobre a camada de satélite do Google.
-            folium.Circle(
-                location=[lat_nova, lon_nova],
-                radius=50.0,
-                color='#ff0000',
-                weight=4,
-                opacity=1.0,
-                fill=True,
-                fill_color='#ff0000',
-                fill_opacity=0.12,
-                dash_array='10,6',
-                tooltip=f'Raio de verificação: 50 m — Solicitação {obra_nova}'
-            ).add_to(fg_foco)
-
-            # Rótulo discreto indicando o raio no mapa.
-            folium.Marker(
-                location=[lat_nova, lon_nova],
-                icon=folium.DivIcon(
-                    icon_size=(90, 20),
-                    icon_anchor=(-8, -16),
-                    html="<div style='background:rgba(255,255,255,.92);border:2px solid #ff0000;border-radius:12px;padding:2px 7px;color:#b91c1c;font-weight:800;font-size:11px;white-space:nowrap;'>RAIO 50 m</div>"
-                )
-            ).add_to(fg_foco)
-
         chave_conc = (obra_conc, round(lat_conc, 7), round(lon_conc, 7))
         if chave_conc not in concluidas_desenhadas:
             concluidas_desenhadas.add(chave_conc)
@@ -1195,14 +1206,31 @@ if foco_mapa_sgo and foco_mapa_sgo.get('conflitos'):
                 <b>Status LIST:</b> {status_conc}<br>
                 <b>Nome:</b> {nome_conc or '-'}<br>
                 <b>Município:</b> {mun_conc or '-'}<br>
-                <b>Coordenadas:</b> {lat_conc:.6f}, {lon_conc:.6f}
+                <b>Coordenadas:</b> {lat_conc:.6f}, {lon_conc:.6f}<br>
+                <b>Raio de conflito:</b> 50 m
             </div>
             """
+
+            # O círculo é centrado na obra concluída e não captura cliques.
+            folium.Circle(
+                location=[lat_conc, lon_conc],
+                radius=50.0,
+                color='#ff0000',
+                weight=4,
+                opacity=1.0,
+                fill=True,
+                fill_color='#ff0000',
+                fill_opacity=0.10,
+                interactive=False
+            ).add_to(fg_foco)
+
+            # Marcador azul adicionado depois do círculo para permanecer acima e clicável.
             folium.Marker(
                 [lat_conc, lon_conc],
                 icon=folium.Icon(color='blue', icon='check', prefix='fa'),
                 tooltip=f"Concluída {obra_conc}",
-                popup=folium.Popup(popup_conc, max_width=320)
+                popup=folium.Popup(popup_conc, max_width=320),
+                z_index_offset=1000
             ).add_to(fg_foco)
 
         folium.PolyLine(
