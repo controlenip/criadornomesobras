@@ -147,42 +147,97 @@ def extrair_coordenadas_vis(texto_coords):
             except: continue
     return pontos
 
+def _repo_root():
+    """Retorna a raiz do repositório mesmo quando esta página está dentro de /pages."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _normalizar_nome_arquivo(nome):
+    """Normaliza acentos/capitalização para localizar arquivos no Linux/Streamlit Cloud."""
+    texto = unicodedata.normalize('NFKD', str(nome))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c))
+    return texto.casefold().strip()
+
+
+def resolver_arquivo_kml(nome_esperado):
+    """Localiza o KML dentro de /kmls mesmo com pequenas diferenças de acento/capitalização."""
+    pasta = os.path.join(_repo_root(), 'kmls')
+    if not os.path.isdir(pasta):
+        return None
+
+    alvo = _normalizar_nome_arquivo(nome_esperado)
+    for nome_real in os.listdir(pasta):
+        if _normalizar_nome_arquivo(nome_real) == alvo:
+            return os.path.join(pasta, nome_real)
+    return None
+
+
 def ler_kml_para_geojson(caminho_arquivo, cor_hex):
-    if not os.path.exists(caminho_arquivo): return None
+    """Lê Polygon/Point de KML de forma tolerante a namespaces XML."""
+    if not caminho_arquivo or not os.path.exists(caminho_arquivo):
+        return None
+
     try:
-        with open(caminho_arquivo, 'r', encoding='utf-8', errors='ignore') as f: kml_str = f.read()
-        kml_str = re.sub(r'\sxmlns(:\w+)?="[^"]+"', '', kml_str)
+        with open(caminho_arquivo, 'r', encoding='utf-8-sig', errors='ignore') as f:
+            kml_str = f.read()
+
         root = ET.fromstring(kml_str)
         features = []
-        for placemark in root.findall('.//Placemark'):
-            name_tag = placemark.find('name')
+
+        # {*} funciona com KMLs com ou sem namespace.
+        for placemark in root.findall('.//{*}Placemark'):
+            name_tag = placemark.find('{*}name')
             nome = name_tag.text.strip() if name_tag is not None and name_tag.text else "Área Demarcada"
-            for poly in placemark.findall('.//Polygon//coordinates'):
-                if poly.text:
-                    coords = []
-                    for coord_str in poly.text.strip().split():
-                        partes = coord_str.split(',')
-                        if len(partes) >= 2: coords.append([float(partes[0]), float(partes[1])])
-                    if coords: 
-                        feat = {"type": "Feature", "properties": {"NOME": nome, "COR": cor_hex}, "geometry": {"type": "Polygon", "coordinates": [coords]}}
-                        bboxes = []
-                        for ring in feat['geometry']['coordinates']:
-                            lons = [pt[0] for pt in ring]
-                            lats = [pt[1] for pt in ring]
-                            bboxes.append((min(lons), max(lons), min(lats), max(lats)))
-                        feat['bboxes'] = bboxes
-                        features.append(feat)
-            for pt in placemark.findall('.//Point/coordinates'):
-                if pt.text:
-                    partes = pt.text.strip().split(',')
-                    if len(partes) >= 2: features.append({"type": "Feature", "properties": {"NOME": nome, "COR": cor_hex}, "geometry": {"type": "Point", "coordinates": [float(partes[0]), float(partes[1])]}})
-        if features: return {"type": "FeatureCollection", "features": features}
+
+            for poly in placemark.findall('.//{*}Polygon//{*}coordinates'):
+                if not poly.text:
+                    continue
+                coords = []
+                for coord_str in poly.text.strip().split():
+                    partes = coord_str.split(',')
+                    if len(partes) >= 2:
+                        try:
+                            coords.append([float(partes[0]), float(partes[1])])
+                        except Exception:
+                            pass
+                if coords:
+                    feat = {
+                        "type": "Feature",
+                        "properties": {"NOME": nome, "COR": cor_hex},
+                        "geometry": {"type": "Polygon", "coordinates": [coords]},
+                    }
+                    ring = feat['geometry']['coordinates'][0]
+                    lons = [pt[0] for pt in ring]
+                    lats = [pt[1] for pt in ring]
+                    feat['bboxes'] = [(min(lons), max(lons), min(lats), max(lats))]
+                    features.append(feat)
+
+            for pt in placemark.findall('.//{*}Point/{*}coordinates'):
+                if not pt.text:
+                    continue
+                partes = pt.text.strip().split(',')
+                if len(partes) >= 2:
+                    try:
+                        features.append({
+                            "type": "Feature",
+                            "properties": {"NOME": nome, "COR": cor_hex},
+                            "geometry": {"type": "Point", "coordinates": [float(partes[0]), float(partes[1])]},
+                        })
+                    except Exception:
+                        pass
+
+        if features:
+            return {"type": "FeatureCollection", "features": features}
         return None
-    except: return None
+    except Exception as exc:
+        st.session_state.setdefault('_kml_erros', {})[os.path.basename(caminho_arquivo)] = str(exc)
+        return None
+
 
 @st.cache_data(show_spinner=False)
-def get_kml_cached(path, color):
-    return ler_kml_para_geojson(path, color)
+def get_kml_cached(nome_arquivo, color):
+    caminho = resolver_arquivo_kml(nome_arquivo)
+    return ler_kml_para_geojson(caminho, color)
 
 def processar_um_kmz(f_name, f_bytes, base_map, geo_data):
     dict_cores = {'REDE PRIMÁRIA': '#e6194b', 'REDE PRIMARIA': '#e6194b', 'REDE SECUNDÁRIA': '#4363d8', 'REDE SECUNDARIA': '#4363d8', 'POSTE': '#808080', 'TRANSFORMADOR': '#f58231', 'CHAVE': '#3cb44b', 'REGULADOR': '#911eb4', 'RELIGADOR': '#46f0f0', 'CAPACITOR': '#ffe119', 'SUBESTAÇÃO': '#000000', 'SUBESTACAO': '#000000'}
@@ -436,12 +491,12 @@ def preprocessar_bboxes_kml(geo_data):
                 bboxes.append((min(lons), max(lons), min(lats), max(lats)))
             feat['bboxes'] = bboxes
 
-geo_q = get_kml_cached("kmls/Áreas Quilombolas.kml", "#ff7f00"); preprocessar_bboxes_kml(geo_q)
-geo_i = get_kml_cached("kmls/Terras Indigenas.kml", "#2ca02c"); preprocessar_bboxes_kml(geo_i)
-geo_a = get_kml_cached("kmls/Sítios Arqueológicos.kml", "#8c564b"); preprocessar_bboxes_kml(geo_a)
-geo_uc_fed = get_kml_cached("kmls/UC Federal.kml", "#e6b800"); preprocessar_bboxes_kml(geo_uc_fed)
-geo_uc_est = get_kml_cached("kmls/UC Estadual.kml", "#ffff00"); preprocessar_bboxes_kml(geo_uc_est)
-geo_uc_mun = get_kml_cached("kmls/UC Municipal.kml", "#ffff00"); preprocessar_bboxes_kml(geo_uc_mun)
+geo_q = get_kml_cached("Áreas Quilombolas.kml", "#ff7f00"); preprocessar_bboxes_kml(geo_q)
+geo_i = get_kml_cached("Terras Indigenas.kml", "#2ca02c"); preprocessar_bboxes_kml(geo_i)
+geo_a = get_kml_cached("Sítios Arqueológicos.kml", "#8c564b"); preprocessar_bboxes_kml(geo_a)
+geo_uc_fed = get_kml_cached("UC Federal.kml", "#e6b800"); preprocessar_bboxes_kml(geo_uc_fed)
+geo_uc_est = get_kml_cached("UC Estadual.kml", "#ffff00"); preprocessar_bboxes_kml(geo_uc_est)
+geo_uc_mun = get_kml_cached("UC Municipal.kml", "#ffff00"); preprocessar_bboxes_kml(geo_uc_mun)
 
 dict_areas_especiais = {
     "Quilombo": geo_q, "Terra Indígena": geo_i, "Sítio Arqueológico": geo_a,
@@ -583,6 +638,25 @@ with st.sidebar:
         mostrar_uc_federal = st.checkbox("🟡 UC Federal", value=False)
         mostrar_uc_estadual = st.checkbox("🟡 UC Estadual", value=False)
         mostrar_uc_municipal = st.checkbox("🟡 UC Municipal", value=False)
+
+        status_kml = {
+            "Áreas Quilombolas": geo_q,
+            "Terras Indígenas": geo_i,
+            "Sítios Arqueológicos": geo_a,
+            "UC Federal": geo_uc_fed,
+            "UC Estadual": geo_uc_est,
+            "UC Municipal": geo_uc_mun,
+        }
+        carregados = [nome for nome, geo in status_kml.items() if geo and geo.get('features')]
+        ausentes = [nome for nome, geo in status_kml.items() if not geo or not geo.get('features')]
+        if carregados:
+            st.caption("✅ KML carregados: " + ", ".join(carregados))
+        if ausentes:
+            st.warning("⚠️ KML sem dados/carregamento: " + ", ".join(ausentes))
+        if st.session_state.get('_kml_erros'):
+            with st.expander("Detalhes técnicos dos KML"):
+                for nome, erro in st.session_state['_kml_erros'].items():
+                    st.code(f"{nome}: {erro}")
     
     with st.expander("🚧 6. Obras e Projetos", expanded=True):
         mostrar_todas_obras = st.checkbox("📍 TODAS AS OBRAS (Clusters)", value=False)
