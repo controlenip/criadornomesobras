@@ -414,7 +414,7 @@ with c1:
                     'obras_digitadas': obras_afetadas,
                     'conflitos': conflitos_50m,
                 }
-                st.switch_page("pages/3_Mapa.py")
+                st.switch_page("pages/3_MAPA.py")
         else:
             st.session_state.pop("foco_mapa_conflito", None)
             st.success("✅ Nenhuma obra com STATUS LIST = CONCLUIDO foi encontrada no raio de 50 m das solicitações informadas.")
