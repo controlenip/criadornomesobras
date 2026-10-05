@@ -1,809 +1,2311 @@
 import streamlit as st
 import pandas as pd
-import unicodedata
-import os
-import base64
+import io
+import zipfile
 import re
-import random
-import datetime
+import time
+import os
+import xml.etree.ElementTree as ET
 import math
+import requests
+import unicodedata
+import folium
+from folium.plugins import MarkerCluster, MeasureControl, Draw
+import gc
+from streamlit_folium import st_folium
+import html
+from concurrent.futures import ThreadPoolExecutor
+from scipy.spatial import cKDTree
+import plotly.express as px
+import sqlite3
+import json
+import shutil
+from datetime import datetime
+
+st.set_page_config(page_title="Gestão de Malha e Projetos", page_icon="🗺️", layout="wide")
 
 # ==========================================
-# 1. CONFIGURAÇÕES DA PÁGINA E CSS
+# CONFIGURAÇÕES CENTRAIS - NÃO ALTERAM A REGRA OPERACIONAL
 # ==========================================
-st.set_page_config(page_title="Gerador SGO & Nomes de Obra", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
+RAIO_CONFLITO_M = 50.0
+RAIO_ARQUEOLOGIA_M = 150.0
+LIMITE_REDES_SIMULTANEAS_PADRAO = 15
+LIMITE_COORD_LAT = (-35.0, 5.0)
+LIMITE_COORD_LON = (-75.0, -30.0)
+CORES_STATUS_LIST = {
+    '0': '#cbd5e1',
+    'EM LEVANTAMENTO': '#22c55e',
+    'ANALISE DE LEVANTAMENTO': '#eab308',
+    'IMPRODUTIVO': '#f97316',
+    'CORRECAO DE LEVANTAMENTO': '#7c3aed',
+    'CONCLUIDO': '#1f77b4',
+}
 
-st.markdown("""
-<style>
-    .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
-    html, body, [class*="css"] { font-size: 12px !important; }
-    
-    .eh { background-color: #059669; color: #f8fafc; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0;}
-    .eh-yellow { background-color: #fef08a; color: #991b1b; text-align: center; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 4px 4px 0 0; margin-bottom: 5px;}
-    .eh-dark { background-color: #047857; color: white; font-weight: 700; padding: 6px; border: 1px solid #cbd5e1; border-bottom: none; font-size: 11px; text-transform: uppercase; border-radius: 4px 4px 0 0;}
-    
-    .et { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background-color: white; margin-bottom: 15px; border-radius: 0 0 4px 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);}
-    .et td { border: 1px solid #e2e8f0; padding: 4px 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; height: 26px; vertical-align: middle; }
-    
-    .lbl { width: 38%; background-color: #f8fafc; color: #475569; font-weight: 600; white-space: nowrap;}
-    .val { width: 62%; background-color: #ffffff; color: #0f172a; font-weight: 700; text-transform: uppercase; }
-    
-    .text-blue { color: #2563eb !important; }
-    .text-red { color: #dc2626 !important; }
-    .text-green { color: #059669 !important; }
-    
-    .obs-box { background-color: #1e293b; color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-style: italic; min-height: 80px; height: auto; white-space: pre-wrap; line-height: 1.4; border-radius: 0 0 4px 4px;}
-    
-    .list-box { background-color: white; border: 1px solid #cbd5e1; padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0f172a; white-space: pre-wrap; line-height: 1.8; border-radius: 0 0 4px 4px; min-height: 150px; height: auto; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
-    .contador-externo {
-        margin-top: 4px;
-        padding: 4px 8px;
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 4px;
-        color: #64748b;
-        font-family: ui-monospace, monospace;
-        font-size: 9px;
-        font-weight: 700;
-        line-height: 1.5;
-        user-select: none;
-        -webkit-user-select: none;
-        -moz-user-select: none;
-    }
-    
-    .lbl-box { background-color: #fef08a; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0px 8px; font-size: 11px; font-weight: 700; color: #7f1d1d; height: 35px; display: flex; align-items: center; margin-bottom: 0px; margin-top: 2px;}
-    div[data-baseweb="select"] > div { border: 1px solid #cbd5e1; border-radius: 4px; min-height: 35px !important; height: 35px !important; font-size: 11px; background-color: white;}
-    input[data-testid="stTextInput"] { border: 1px solid #cbd5e1; border-radius: 4px; height: 35px !important; min-height: 35px !important; font-size: 11px; font-weight: bold; background-color: white;}
-    .stSelectbox, .stTextInput { margin-bottom: -10px !important; }
-    .stTextArea textarea { border: 1px solid #94a3b8 !important; border-radius: 4px !important; font-size: 11px; font-family: ui-monospace, monospace; }
-    
-    /* Regra para o botão de limpar ficar compacto e com o ícone visível */
-    button[kind="primary"] p {
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        color: #ffffff !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-def limpar_campos_manuais():
-    for i in range(1, 10):
-        chave = f"i{i}"
-        if chave in st.session_state:
-            st.session_state[chave] = ""
-    if "text_area_obras" in st.session_state:
-        st.session_state["text_area_obras"] = ""
-    if "notas_vu" in st.session_state:
-        st.session_state["notas_vu"] = False
-    if "utilizar_notas_canc_finl" in st.session_state:
-        st.session_state["utilizar_notas_canc_finl"] = False
-    # Limpa também o último foco enviado para a página do mapa.
-    st.session_state.pop("foco_mapa_conflito", None)
-    st.session_state.pop("conflitos_50m_sgo", None)
-
-def remover_acentos(texto):
-    if pd.isna(texto) or texto == "": return ""
-    texto = str(texto).upper().strip()
-    return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-
-def formatar_data(data_raw):
+def _mtime_seguro(caminho):
     try:
-        if pd.isna(data_raw) or str(data_raw).lower() == 'nan' or str(data_raw).strip() == "":
-            return ""
-        data_obj = pd.to_datetime(data_raw)
-        return data_obj.strftime('%d/%m/%Y')
-    except:
-        return str(data_raw)[:10]
+        return os.path.getmtime(caminho)
+    except OSError:
+        return 0.0
+
+def classificar_severidade_distancia(dist_m):
+    try:
+        d = float(dist_m)
+    except Exception:
+        return 'Sem classificação'
+    if d <= 0.5:
+        return '📌 Mesmo ponto (≈0 m)'
+    if d <= 10:
+        return '🔴 Crítico (≤ 10 m)'
+    if d <= 25:
+        return '🟠 Alto (10–25 m)'
+    if d <= RAIO_CONFLITO_M:
+        return '🟡 Médio (25–50 m)'
+    return 'Fora do raio'
+
+def dataframe_para_excel_bytes(df_export, nome_aba='Dados'):
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_export.to_excel(writer, index=False, sheet_name=str(nome_aba)[:31])
+    return buffer.getvalue()
 
 # ==========================================
-# FUNÇÃO BLINDADA EXTREMA
+# 1. MOTOR DE BANCO DE DADOS (SQLITE MIGRATION)
 # ==========================================
-def buscar_info(row, colunas_alvo):
-    if row is None or row.empty: return ""
-    for col in row.index:
-        col_limpa = re.sub(r'[^A-Z0-9]', '', remover_acentos(str(col)).upper())
-        col_limpa = re.sub(r'\d+$', '', col_limpa) 
-        
-        for alvo in colunas_alvo:
-            alvo_limpo = re.sub(r'[^A-Z0-9]', '', remover_acentos(alvo).upper())
-            if col_limpa == alvo_limpo:
-                val = str(row[col]).strip()
-                if val and val.lower() not in ['nan', 'none', 'null', '']:
-                    return val
-    return ""
+def init_db_and_migrate():
+    if not os.path.exists("database"):
+        os.makedirs("database", exist_ok=True)
+    
+    conn = sqlite3.connect("database/redes.db")
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS malha
+                 (ALIMENTADOR TEXT, REGIONAL TEXT, MUNICIPIO TEXT,
+                  TIPO_GEOMETRIA TEXT, TIPO_REDE TEXT, NOME TEXT,
+                  COORDS TEXT, COR TEXT)''')
+    conn.commit()
+    
+    if os.path.exists("database/redes"):
+        pkl_files = [f for f in os.listdir("database/redes") if f.endswith('.pkl')]
+        for f in pkl_files:
+            try:
+                caminho_pkl = f"database/redes/{f}"
+                df_pkl = pd.read_pickle(caminho_pkl)
+                df_pkl['COORDS'] = df_pkl['COORDS'].apply(json.dumps)
+                df_pkl.to_sql('malha', conn, if_exists='append', index=False)
+                os.remove(caminho_pkl)
+            except Exception:
+                pass
+    conn.close()
+
+init_db_and_migrate()
+
+# ==========================================
+# 2. FUNÇÕES BASE, PLANILHA E GEOLOCALIZAÇÃO
+# ==========================================
+def remove_accents(input_str):
+    nfkd_form = unicodedata.normalize('NFKD', str(input_str))
+    return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
+def latlon_to_xyz(lat, lon):
+    R = 6371000.0
+    lat_rad, lon_rad = math.radians(lat), math.radians(lon)
+    return R * math.cos(lat_rad) * math.cos(lon_rad), R * math.cos(lat_rad) * math.sin(lon_rad), R * math.sin(lat_rad)
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat/2.0)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2.0)**2
+    c = 2 * math.asin(math.sqrt(a))
+    return R * c
 
 @st.cache_data(show_spinner=False)
-def carregar_dados(file_path, mtime):
-    xls = pd.ExcelFile(file_path)
-        
-    try: 
-        df_notas = pd.read_excel(xls, sheet_name='NOTAS')
-    except: 
-        try: df_notas = pd.read_excel(xls, sheet_name='NotasSisgb')
-        except: df_notas = pd.DataFrame()
-        
-    if not df_notas.empty:
-        df_notas.columns = df_notas.columns.str.strip().str.upper()
-        if 'PROTOCOLO' in df_notas.columns:
-            df_notas['PROTOCOLO'] = df_notas['PROTOCOLO'].astype(str).replace(r'\.0$', '', regex=True).str.strip()
-            
-    try: 
-        df_dados = pd.read_excel(xls, sheet_name='DADOS', header=1)
-    except:
-        try: df_dados = pd.read_excel(xls, sheet_name='Dados', header=1)
-        except: df_dados = pd.DataFrame()
-        
-    if not df_dados.empty:
-        df_dados.columns = df_dados.columns.str.strip().str.upper()
+def load_base_mapping():
+    mun_to_reg = {}
+    file_path = "MUNICIPIOS-REGIONAIS.xlsx"
+    if not os.path.exists(file_path):
+        st.sidebar.error(f"🚨 Planilha '{file_path}' não encontrada!")
+    else:
+        try:
+            df_base = pd.read_excel(file_path)
+            for _, row in df_base.iterrows():
+                mun = remove_accents(str(row.get('MunicIpio', ''))).upper().strip()
+                reg = str(row.get('Regional', '')).strip().upper()
+                if mun and reg and reg != 'NAN': mun_to_reg[mun] = reg
+        except Exception as e: st.sidebar.error(f"🚨 Erro: {e}")
     
-    return pd.DataFrame(), df_notas, df_dados # Retornando DF vazio para SISCO, pois não é mais usado
+    overrides_centro = ['SANTA LUZIA', 'CONCEICAO DO LAGO-ACU', 'CONCEICAO DO LAGO ACU', 'PINDARE-MIRIM', 'PINDARE MIRIM', 'OLHO DAGUA DAS CUNHAS', 'OLHO D\'AGUA DAS CUNHAS', 'GOVERNADOR LUIZ ROCHA']
+    for mun in overrides_centro:
+        if mun not in mun_to_reg: mun_to_reg[mun] = 'CENTRO'
+    return mun_to_reg
 
-
-# ==========================================
-# VERIFICAÇÃO AUTOMÁTICA DE OBRAS CONCLUÍDAS EM RAIO DE 50 M
-# ==========================================
-def _coord_num(valor):
-    """Converte coordenadas vindas do Excel para float de forma tolerante."""
+@st.cache_data(show_spinner=False)
+def get_base_geojson():
+    mun_to_reg = load_base_mapping()
+    url_geojson = "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-21-mun.json"
     try:
-        if pd.isna(valor):
-            return None
-        txt = str(valor).strip().replace(',', '.')
-        if txt.lower() in ['', 'nan', 'none', 'null']:
-            return None
-        v = float(txt)
-        return v
-    except Exception:
+        resp = requests.get(url_geojson, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        geo_data = resp.json()
+    except: return None
+
+    reg_colors = {'LESTE': '#1f77b4', 'CENTRO': '#d62728', 'NOROESTE': '#ffed6f', 'NORTE': '#ff7f0e', 'SUL': '#8fbc8f', 'DESCONHECIDO': '#cccccc'}
+    for feature in geo_data['features']:
+        mun_name = feature['properties']['name']
+        mun_name_norm = remove_accents(mun_name).upper().strip()
+        reg = mun_to_reg.get(mun_name_norm, "DESCONHECIDO")
+        feature['properties']['REGIONAL'] = reg
+        feature['properties']['MUNICIPIO'] = mun_name_norm
+        feature['properties']['fillColor'] = reg_colors.get(reg, '#cccccc')
+    return geo_data
+
+def is_point_in_polygon(lon, lat, polygon):
+    inside = False
+    for i in range(len(polygon)):
+        p1x, p1y = polygon[i]
+        p2x, p2y = polygon[(i + 1) % len(polygon)]
+        if ((p1y > lat) != (p2y > lat)) and (lon < (p2x - p1x) * (lat - p1y) / (p2y - p1y + 1e-9) + p1x): inside = not inside
+    return inside
+
+def get_municipio_by_coord(lon, lat, geo_data):
+    if not geo_data: return "N/A", "N/A"
+    for feature in geo_data['features']:
+        geom = feature['geometry']
+        mun = feature['properties'].get('MUNICIPIO', 'N/A')
+        reg = feature['properties'].get('REGIONAL', 'N/A')
+        if geom['type'] == 'Polygon':
+            for ring in geom['coordinates']:
+                if is_point_in_polygon(lon, lat, ring): return mun, reg
+        elif geom['type'] == 'MultiPolygon':
+            for poly in geom['coordinates']:
+                for ring in poly:
+                    if is_point_in_polygon(lon, lat, ring): return mun, reg
+    return "N/A", "N/A"
+
+def extrair_coordenadas_vis(texto_coords):
+    pontos = []
+    for coord in texto_coords.strip().split():
+        partes = coord.split(',')
+        if len(partes) >= 2:
+            try:
+                lon = float(partes[0].strip().replace(',', '.'))
+                lat = float(partes[1].strip().replace(',', '.'))
+                if lat != 0.0 and lon != 0.0 and LIMITE_COORD_LAT[0] <= lat <= LIMITE_COORD_LAT[1] and LIMITE_COORD_LON[0] <= lon <= LIMITE_COORD_LON[1]: pontos.append([lat, lon]) 
+            except: continue
+    return pontos
+
+def _repo_root():
+    """Retorna a raiz do repositório mesmo quando esta página está dentro de /pages."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _normalizar_nome_arquivo(nome):
+    """Normaliza acentos/capitalização para localizar arquivos no Linux/Streamlit Cloud."""
+    texto = unicodedata.normalize('NFKD', str(nome))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c))
+    return texto.casefold().strip()
+
+
+def resolver_arquivo_kml(nome_esperado):
+    """Localiza o KML dentro de /kmls mesmo com pequenas diferenças de acento/capitalização."""
+    pasta = os.path.join(_repo_root(), 'kmls')
+    if not os.path.isdir(pasta):
+        return None
+
+    alvo = _normalizar_nome_arquivo(nome_esperado)
+    for nome_real in os.listdir(pasta):
+        if _normalizar_nome_arquivo(nome_real) == alvo:
+            return os.path.join(pasta, nome_real)
+    return None
+
+
+def ler_kml_para_geojson(caminho_arquivo, cor_hex):
+    """Lê Polygon/Point de KML de forma tolerante a namespaces XML."""
+    if not caminho_arquivo or not os.path.exists(caminho_arquivo):
+        return None
+
+    try:
+        with open(caminho_arquivo, 'r', encoding='utf-8-sig', errors='ignore') as f:
+            kml_str = f.read()
+
+        root = ET.fromstring(kml_str)
+        features = []
+
+        # {*} funciona com KMLs com ou sem namespace.
+        for placemark in root.findall('.//{*}Placemark'):
+            name_tag = placemark.find('{*}name')
+            nome = name_tag.text.strip() if name_tag is not None and name_tag.text else "Área Demarcada"
+
+            for poly in placemark.findall('.//{*}Polygon//{*}coordinates'):
+                if not poly.text:
+                    continue
+                coords = []
+                for coord_str in poly.text.strip().split():
+                    partes = coord_str.split(',')
+                    if len(partes) >= 2:
+                        try:
+                            coords.append([float(partes[0]), float(partes[1])])
+                        except Exception:
+                            pass
+                if coords:
+                    feat = {
+                        "type": "Feature",
+                        "properties": {"NOME": nome, "COR": cor_hex},
+                        "geometry": {"type": "Polygon", "coordinates": [coords]},
+                    }
+                    ring = feat['geometry']['coordinates'][0]
+                    lons = [pt[0] for pt in ring]
+                    lats = [pt[1] for pt in ring]
+                    feat['bboxes'] = [(min(lons), max(lons), min(lats), max(lats))]
+                    features.append(feat)
+
+            for pt in placemark.findall('.//{*}Point/{*}coordinates'):
+                if not pt.text:
+                    continue
+                partes = pt.text.strip().split(',')
+                if len(partes) >= 2:
+                    try:
+                        features.append({
+                            "type": "Feature",
+                            "properties": {"NOME": nome, "COR": cor_hex},
+                            "geometry": {"type": "Point", "coordinates": [float(partes[0]), float(partes[1])]},
+                        })
+                    except Exception:
+                        pass
+
+        if features:
+            return {"type": "FeatureCollection", "features": features}
+        return None
+    except Exception as exc:
+        st.session_state.setdefault('_kml_erros', {})[os.path.basename(caminho_arquivo)] = str(exc)
         return None
 
 
-def distancia_metros(lat1, lon1, lat2, lon2):
-    """Distância geodésica aproximada entre dois pontos, em metros."""
-    r = 6371000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2.0) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2.0) ** 2
-    a = min(1.0, max(0.0, a))
-    return 2.0 * r * math.asin(math.sqrt(a))
+@st.cache_data(show_spinner=False)
+def get_kml_cached(nome_arquivo, color):
+    caminho = resolver_arquivo_kml(nome_arquivo)
+    return ler_kml_para_geojson(caminho, color)
 
+def processar_um_kmz(f_name, f_bytes, base_map, geo_data):
+    dict_cores = {'REDE PRIMÁRIA': '#e6194b', 'REDE PRIMARIA': '#e6194b', 'REDE SECUNDÁRIA': '#4363d8', 'REDE SECUNDARIA': '#4363d8', 'POSTE': '#808080', 'TRANSFORMADOR': '#f58231', 'CHAVE': '#3cb44b', 'REGULADOR': '#911eb4', 'RELIGADOR': '#46f0f0', 'CAPACITOR': '#ffe119', 'SUBESTAÇÃO': '#000000', 'SUBESTACAO': '#000000'}
+    nome_arquivo = f_name.upper().replace('.KMZ', '').replace('.KML', '')
+    conteudo_kml = ""
+    if f_name.lower().endswith('.kmz'):
+        try:
+            with zipfile.ZipFile(io.BytesIO(f_bytes), 'r') as z:
+                for item in z.namelist():
+                    if item.lower().endswith('.kml'):
+                        conteudo_kml = z.read(item).decode('utf-8', errors='ignore')
+                        break
+        except Exception: return None
+    else:
+        try: conteudo_kml = f_bytes.decode('utf-8', errors='ignore')
+        except: return None
+    conteudo_kml = re.sub(r'\sxmlns(:\w+)?="[^"]+"', '', conteudo_kml)
+    try: root = ET.fromstring(conteudo_kml)
+    except Exception: return None
+    municipio, regional = "N/A", "N/A"
+    mun_match = re.search(r'name=["\'](?:MUNICIPIO|CIDADE)["\'][^>]*>(.*?)</', conteudo_kml, re.IGNORECASE)
+    if mun_match: 
+        municipio = mun_match.group(1).strip().upper()
+        mun_norm = remove_accents(municipio)
+        if mun_norm in base_map: regional = base_map[mun_norm]
+    if regional == "N/A":
+        reg_match = re.search(r'name=["\'](?:REGIONAL|REGIAO)["\'][^>]*>(.*?)</', conteudo_kml, re.IGNORECASE)
+        if reg_match: regional = reg_match.group(1).strip().upper()
+    if regional == "N/A":
+        sigla_match = re.search(r'\[([A-Z]{3})\]', nome_arquivo)
+        if sigla_match: regional = sigla_match.group(1)
+    registros_flat = []
+    primeira_coord = None
+    for folder in root.findall('.//Folder'):
+        name_tag = folder.find('name')
+        if name_tag is not None and name_tag.text:
+            nome_pasta = name_tag.text.strip().upper()
+            if "CEMAR" in nome_pasta or nome_arquivo in nome_pasta: continue
+            cor_elemento = dict_cores.get(nome_pasta, '#333333')
+            for placemark in folder.findall('.//Placemark'):
+                pm_name_tag = placemark.find('name')
+                nome_elemento = pm_name_tag.text.strip() if pm_name_tag is not None and pm_name_tag.text else "S/N"
+                for ls in placemark.findall('.//LineString/coordinates'):
+                    if ls.text:
+                        coords = extrair_coordenadas_vis(ls.text)
+                        if len(coords) > 1:
+                            if primeira_coord is None:
+                                primeira_coord = coords[0]
+                            registros_flat.append({'ALIMENTADOR': nome_arquivo, 'REGIONAL': regional, 'MUNICIPIO': municipio, 'TIPO_GEOMETRIA': 'Linha', 'TIPO_REDE': nome_pasta, 'NOME': nome_elemento, 'COORDS': coords, 'COR': cor_elemento})
+                for pt in placemark.findall('.//Point/coordinates'):
+                    if pt.text:
+                        coords = extrair_coordenadas_vis(pt.text)
+                        if len(coords) > 0:
+                            if primeira_coord is None:
+                                primeira_coord = coords[0]
+                            registros_flat.append({'ALIMENTADOR': nome_arquivo, 'REGIONAL': regional, 'MUNICIPIO': municipio, 'TIPO_GEOMETRIA': 'Ponto', 'TIPO_REDE': nome_pasta, 'NOME': nome_elemento, 'COORDS': coords[0], 'COR': cor_elemento})
+    if municipio == "N/A" and primeira_coord is not None and geo_data is not None:
+        mun_descob, reg_descob = get_municipio_by_coord(primeira_coord[1], primeira_coord[0], geo_data)
+        if mun_descob != "N/A":
+            municipio = mun_descob
+            regional = reg_descob if reg_descob != "N/A" else regional
+            for r in registros_flat:
+                r['MUNICIPIO'] = municipio
+                r['REGIONAL'] = regional
+    if registros_flat: return pd.DataFrame(registros_flat)
+    return None
 
-def detectar_conflitos_concluidos_50m(df_base, protocolos, raio_m=50.0):
-    """
-    Para cada protocolo digitado em SOLICITAÇÕES, procura obras cuja coluna
-    STATUS LIST esteja como CONCLUIDO e que estejam a até `raio_m` metros.
-    Retorna uma lista com todos os pares encontrados.
-    """
-    if df_base is None or df_base.empty or not protocolos:
-        return []
-
-    obrigatorias = ['PROTOCOLO', 'STATUS LIST', 'LATITUDE', 'LONGITUDE']
-    if not all(c in df_base.columns for c in obrigatorias):
-        return []
-
-    base = df_base.copy()
-    base['PROTOCOLO'] = base['PROTOCOLO'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-    base['_STATUS_LIST_NORM'] = base['STATUS LIST'].apply(remover_acentos).astype(str).str.upper().str.strip()
-    base['_LAT_CONFLITO'] = base['LATITUDE'].apply(_coord_num)
-    base['_LON_CONFLITO'] = base['LONGITUDE'].apply(_coord_num)
-
-    concluidas = base[
-        base['_STATUS_LIST_NORM'].str.contains('CONCLUID', na=False)
-        & base['_LAT_CONFLITO'].notna()
-        & base['_LON_CONFLITO'].notna()
-    ].copy()
-
-    if concluidas.empty:
-        return []
-
-    conflitos = []
-    protocolos_limpos = [str(p).strip() for p in protocolos if str(p).strip()]
-
-    for protocolo in protocolos_limpos:
-        atual = base[base['PROTOCOLO'] == protocolo]
-        if atual.empty:
-            continue
-
-        # Usa a primeira ocorrência válida da solicitação informada.
-        row_atual = None
-        for _, rr in atual.iterrows():
-            la = _coord_num(rr.get('LATITUDE'))
-            lo = _coord_num(rr.get('LONGITUDE'))
-            if la is not None and lo is not None and la != 0 and lo != 0:
-                row_atual = rr
-                lat_nova, lon_nova = la, lo
-                break
-        if row_atual is None:
-            continue
-
-        for _, rr in concluidas.iterrows():
-            protocolo_concluido = str(rr.get('PROTOCOLO', '')).strip()
-            # A própria nota não deve gerar conflito consigo mesma a 0 metro.
-            if protocolo_concluido == protocolo:
+def processar_e_salvar_kmz_paralelo(arquivos):
+    base_map = load_base_mapping()
+    geo_data = get_base_geojson()
+    novos_processados = 0
+    df_lote = []
+    
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(processar_um_kmz, f.name, f.getvalue(), base_map, geo_data): f.name
+            for f in arquivos
+        }
+        for future, nome_arquivo_processado in futures.items():
+            try:
+                df_alimentador = future.result()
+            except Exception as e:
+                # Um arquivo com problema não deve interromper todo o lote.
+                st.warning(f"⚠️ Falha ao processar '{nome_arquivo_processado}': {e}")
                 continue
 
-            lat_conc = float(rr['_LAT_CONFLITO'])
-            lon_conc = float(rr['_LON_CONFLITO'])
-            dist = distancia_metros(lat_nova, lon_nova, lat_conc, lon_conc)
-            if dist <= float(raio_m):
-                conflitos.append({
-                    'obra_nova': protocolo,
-                    'nome_nova': str(row_atual.get('NOME', row_atual.get('NOME DO SOLICITANTE', ''))).strip(),
-                    'municipio_nova': str(row_atual.get('MUNICIPIO', '')).strip(),
-                    'lat_nova': float(lat_nova),
-                    'lon_nova': float(lon_nova),
-                    'obra_concluida': protocolo_concluido,
-                    'nome_concluida': str(rr.get('NOME', rr.get('NOME DO SOLICITANTE', ''))).strip(),
-                    'municipio_concluida': str(rr.get('MUNICIPIO', '')).strip(),
-                    'lat_concluida': lat_conc,
-                    'lon_concluida': lon_conc,
-                    'status_list_concluida': str(rr.get('STATUS LIST', '')).strip(),
-                    'distancia_m': round(float(dist), 1),
-                })
-
-    conflitos.sort(key=lambda x: (str(x['obra_nova']), float(x['distancia_m'])))
-    return conflitos
-
-# ==========================================
-# 2. LOGO NO TOPO E DADOS PADRÃO
-# ==========================================
-st.markdown("<br>", unsafe_allow_html=True) 
-if os.path.exists("LOGO_NIP.png"):
-    with open("LOGO_NIP.png", "rb") as image_file:
-        b64_logo = base64.b64encode(image_file.read()).decode()
-    
-    st.markdown(f'''
-        <div style="text-align: center; margin-bottom: 10px;">
-            <img src="data:image/png;base64,{b64_logo}" style="max-width: 150px; width: 100%; height: auto; pointer-events: none;">
-        </div>
-    ''', unsafe_allow_html=True)
-
-col_btn1, col_btn2, col_btn3 = st.columns([3.5, 1.5, 3.5])
-with col_btn2:
-    st.button("🧹 LIMPAR CAMPOS", type="primary", on_click=limpar_campos_manuais, use_container_width=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-lista_tipos_obra = ['AF-AMPLIAÇÃO DE FASE', 'AP-AMPLIAÇÃO DE POTENCIA', 'CA-CONSTRUÇÃO DE AL', 'CT-CONSTRUÇÃO DE RD', 'DV-DIVISÃO DE CIRCUITO', 'FC-FLEXIBILIZAÇÃO DE CIRCUITO', 'IE-INSTALAÇÃO DE EQUIPAMENTOS', 'IT-INSTALAÇÃO DE TRANSFORMADORES', 'ME-MELHORIA DE REDE DE DISTRIBUIÇÃO', 'MI-MICROSSISTEMA ISOLADO DE GERAÇÃO DE ENERGIA', 'MP-REALOCAÇÃO DE POSTE', 'MT-REALOCAÇÃO DE TRANSFORMADORES RD', 'RC-RECAPACITAÇÃO DE CONDUTORES', 'RE-RECAPACITAÇÃO DE EQUIPAMENTOS DE RD', 'RF-RECAPACITAÇÃO DE C,FA, C,FU E PR', 'RP-RECAPACITAÇÃO DE POSTES', 'RT-RECAPACITAÇÃO DE TRANSFORMADOR DE RD', 'SI-SISTEMA INDIVIDUAL DE GERAÇÃO DE ENERGIA', 'TE-REALOCAÇÃO DE EQUIPAMENTOS']
-lista_pi = ['ASC', 'ATV', 'BCP', 'BRE', 'BRT', 'CCF', 'DIF', 'DIS', 'EME', 'ERD', 'EUR', 'FIM', 'INC', 'INR', 'LPT', 'MBT', 'MCJ', 'MCR', 'MEL', 'MGD', 'MMT', 'MRS', 'MSE', 'MTP', 'NIV', 'OCP', 'ODS', 'PMC', 'REF', 'REG', 'SEG', 'SEQ', 'SID', 'SLS', 'SMC', 'TRI', 'UNI', 'UNP', 'UNR']
-lista_mun = ['AAM-ALTO ALEGRE DO MARANHAO', 'AAP-ALTO ALEGRE DO PINDARE', 'ACL-ACAILANDIA', 'ACT-ALCANTARA', 'ADA-ALDEIAS ALTAS', 'ADM-AGUA DOCE DO MARANHAO', 'AFC-AFONSO CUNHA', 'ALM-ALTAMIRA DO MARANHAO', 'ALP-ALTO PARNAIBA', 'AME-ARAME', 'AMM-AMAPA DO MARANHAO', 'AMO-AMARANTE DO MARANHAO', 'ANA-ANAJATUBA', 'ANS-ANAPURUS', 'API-APICUM-ACU', 'ARA-ARAGUANA', 'ARI-ARARI', 'ARS-ARAIOSES', 'AXX-AXIXA', 'BAC-BACURI', 'BBR-BURITI BRAVO', 'BCA-BACABEIRA', 'BCB-BACABAL', 'BCP-BURITICUPU', 'BCT-BACURITUBA', 'BDC-BARRA DO CORDA', 'BEM-BERNARDO DO MEARIM', 'BGU-BELAGUA', 'BIV-BURITI', 'BJA-BREJO DE AREIA', 'BJD-BOM JARDIM', 'BJO-BREJO', 'BJS-BOM JESUS DAS SELVAS', 'BJU-BARAO DE GRAJAU', 'BLE-BENEDITO LEITE', 'BLS-BALSAS', 'BLU-BOM LUGAR', 'BQM-BEQUIMAO', 'BRN-BARREIRINHAS', 'BUT-BURITIRANA', 'BVG-BOA VISTA DO GURUPI', 'BVM-BELA VISTA DO MARANHAO', 'CAM-CAMPESTRE DO MARANHAO', 'CAN-CANDIDO MENDES', 'CAR-CAROLINA', 'CDL-CEDRAL', 'CGE-CENTRO DO GUILHERME', 'CGR-CACHOEIRA GRANDE', 'CHA-CHAPADINHA', 'CHE-CANTANHEDE', 'CID-CIDELANDIA', 'CJI-CAJARI', 'CJO-CAJAPIO', 'CLA-CONCEICAO DO LAGO-ACU', 'CMA-CENTRAL DO MARANHAO', 'CNM-CENTRO NOVO DO MARANHAO', 'CNO-COELHO NETO', 'COL-COLINAS', 'COO-CODO', 'CPN-CAPINZAL DO NORTE', 'CRA-COROATA', 'CRP-CURURUPU', 'CTP-CARUTAPERA', 'CXS-CAXIAS', 'DAV-DAVINOPOLIS', 'DBA-DUQUE BACELAR', 'DPO-DOM PEDRO', 'ESP-ESPERANTINOPOLIS', 'ETE-ESTREITO', 'FFA-FERNANDO FALCAO', 'FNM-FEIRA NOVA DO MARANHAO', 'FOR-FORTUNA', 'FSN-FORMOSA DA SERRA NEGRA', 'FTN-FORTALEZA DOS NOGUEIRAS', 'GDV-GODOFREDO VIANA', 'GEB-GOVERNADOR EUGENIO BARROS', 'GEL-GOVERNADOR EDISON LOBAO', 'GJU-GRAJAU', 'GLR-GOVERNADOR LUIZ ROCHA', 'GNB-GOVERNADOR NEWTON BELLO', 'GNF-GOVERNADOR NUNES FREIRE', 'GOA-GOVERNADOR ARCHER', 'GOD-GONCALVES DIAS', 'GRA-GRACA ARANHA', 'GUI-GUIMARAES', 'HUC-HUMBERTO DE CAMPOS', 'ICT-ICATU', 'IGG-IGARAPE GRANDE', 'IGM-IGARAPE DO MEIO', 'IPG-ITAIPAVA DO GRAJAU', 'IPZ-IMPERATRIZ', 'ITG-ITINGA DO MARANHAO', 'ITM-ITAPECURU MIRIM', 'JAT-JATOBA', 'JEV-JENIPAPO DOS VIEIRAS', 'JLB-JOAO LISBOA', 'JOS-JOSELANDIA', 'JUM-JUNCO DO MARANHAO', 'LAM-LAGOA DO MATO', 'LAN-LAJEADO NOVO', 'LGJ-LAGO DO JUNCO', 'LGM-LAGOA GRANDE DO MARANHAO', 'LGR-LAGO DOS RODRIGUES', 'LGV-LAGO VERDE', 'LIC-LIMA CAMPOS', 'LPD-LAGO DA PEDRA', 'LRT-LORETO', 'LUD-LUIS DOMINGUES', 'MAA-MAGALHAES DE ALMEIDA', 'MAL-MONTES ALTOS', 'MHO-MARANHAOZINHO', 'MIL-MILAGRES DO MARANHAO', 'MIR-MIRINZAL', 'MJS-MARAJA DO SENA', 'MME-MARACACUME', 'MON-MONCAO', 'MRA-MIRANDA DO NORTE', 'MRD-MIRADOR', 'MRR-MORROS', 'MTA-MATINHA', 'MTN-MATOES DO NORTE', 'MTR-MATA ROMA', 'MTS-MATOES', 'NCO-NOVA COLINAS', 'NIO-NOVA IORQUE', 'NRO-NINA RODRIGUES', 'NVO-NOVA OLINDA DO MARANHAO', "ODC-OLHO D'AGUA DAS CUNHAS", 'ONO-OLINDA NOVA DO MARANHAO', 'PAB-PASTOS BONS', 'PAF-PASSAGEM FRANCA', 'PAR-PAULO RAMOS', 'PCL-PACO DO LUMIAR', 'PCZ-PRIMEIRA CRUZ', 'PDR-PEDRO DO ROSARIO', 'PDS-PEDREIRAS', 'PDT-PRESIDENTE DUTRA', 'PFO-PORTO FRANCO', 'PHO-PINHEIRO', 'PIO-PIO XII', 'PJU-PRESIDENTE JUSCELINO', 'PMA-PALMEIRANDIA', 'PME-PRESIDENTE MEDICI', 'PMI-PINDARE-MIRIM', 'PNA-PARNARAMA', 'PNL-PENALVA', 'PNV-PAULINO NEVES', 'PPE-PIRAPEMAS', 'PPS-POCAO DE PEDRAS', 'PRB-PARAIBANO', 'PRM-PERI MIRIM', 'PRO-PERITORO', 'PSY-PRESIDENTE SARNEY', 'PTR-PORTO RICO DO MARANHAO', 'PVA-PRESIDENTE VARGAS', 'RAP-RAPOSA', 'RCO-RIACHAO', 'RFQ-RIBAMAR FIQUENE', 'RSO-ROSARIO', 'SAL-SANTO ANTONIO DOS LOPES', 'SAM-SANTO AMARO DO MARANHAO', 'SAR-SAO ROBERTO', 'SBN-SAO BERNARDO', 'SBR-SAO BENEDITO DO RIO PRETO', 'SBT-SAO BENTO', 'SBZ-SAO RAIMUNDO DO DOCA BEZERRA', 'SDM-SAO DOMINGOS DO MARANHAO', 'SDZ-SAO DOMINGOS DO AZEITAO', 'SER-SERRANO DO MARANHAO', 'SFB-SAO FELIX DE BALSAS', 'SFH-SAO FRANCISCO DO MARANHAO', 'SFJ-SAO FRANCISCO DO BREJAO', 'SFM-SANTA FILOMENA DO MARANHAO', 'SGM-SAO LUIS GONZAGA DO MARANHAO', 'SHL-SANTA HELENA', 'SJA-SAO JOAO BATISTA', 'SJB-SAO JOSE DOS BASILIOS', 'SJC-SAO JOAO DO CARU', 'SJI-SAO JOAO DO PARAISO', 'SJP-SAO JOAO DOS PATOS', 'SJR-SAO JOSE DE RIBAMAR', 'SJS-SAO JOAO DO SOTER', 'SLR-SENADOR LA ROCQUE', 'SLS-SAO LUIS', 'SMB-SAMBAIBA', 'SMH-SANTANA DO MARANHAO', 'SMT-SAO MATEUS DO MARANHAO', 'SNO-SITIO NOVO', 'SPB-SAO PEDRO DA AGUA BRANCA', 'SPC-SAO PEDRO DOS CRENTES', 'SQM-SANTA QUITERIA DO MARANHAO', 'SRI-SANTA RITA', 'SRM-SAO RAIMUNDO DAS MANGABEIRAS', 'STH-SATUBINHA', 'STI-SANTA INES', 'STL-SANTA LUZIA', 'STP-SANTA LUZIA DO PARUA', 'SUN-SUCUPIRA DO NORTE', 'SUR-SUCUPIRA DO RIACHAO', 'SVF-SAO VICENTE FERRER', 'SXC-SENADOR ALEXANDRE COSTA', 'TBR-TIMBIRAS', 'TFG-TASSO FRAGOSO', 'TMO-TIMON', 'TRL-TURILANDIA', 'TTA-TUTOIA', 'TTM-TUNTUM', 'TUF-TUFILANDIA', 'TUR-TURIACU', 'TVA-TRIZIDELA DO VALE', 'UBS-URBANO SANTOS', 'VFR-VITORINO FREIRE', 'VGG-VARGEM GRANDE', 'VNA-VIANA', 'VNM-VILA NOVA DOS MARTIRIOS', 'VTM-VITORIA DO MEARIM', 'ZDC-ZE DOCA']
-lista_id = ['AL-Alimentador Tronco', 'BA-Barramento', 'CC-Conta Contrato', 'CO-Numero Componente', 'ID-IDENTIFICADOR', 'NR-Nota de Reclamação', 'NS-Nota CCS', 'OC-Ocorrência', 'OS-Ordem de Serviço', 'PF-CPF do cliente', 'PG-Ponto Geográfico', 'PT-Parecer Técnico', 'TR-Tempo Real']
-
-arquivo_bd = "BASE_LEVANTAMENTO_ATUALIZADA.xlsx"
-df_notas, df_dados = pd.DataFrame(), pd.DataFrame()
-map_tipo_obra, map_mun = {}, {}
-
-if os.path.exists(arquivo_bd):
-    mtime = os.path.getmtime(arquivo_bd) 
-    with st.spinner("Carregando banco de dados..."):
-        _, df_notas, df_dados = carregar_dados(arquivo_bd, mtime)
+            if df_alimentador is not None and not df_alimentador.empty:
+                df_alimentador['COORDS'] = df_alimentador['COORDS'].apply(json.dumps)
+                df_lote.append(df_alimentador)
+                novos_processados += 1
+                
+    if df_lote:
+        df_final = pd.concat(df_lote, ignore_index=True)
+        conn = sqlite3.connect("database/redes.db")
+        c = conn.cursor()
+        alimentadores_inseridos = df_final['ALIMENTADOR'].unique().tolist()
+        for alim in alimentadores_inseridos:
+            c.execute("DELETE FROM malha WHERE ALIMENTADOR = ?", (alim,))
+        df_final.to_sql('malha', conn, if_exists='append', index=False)
+        conn.commit()
+        conn.close()
         
-    if not df_dados.empty:
-        if 'TIPO DE OBRA' in df_dados.columns: lista_tipos_obra = sorted(df_dados['TIPO DE OBRA'].dropna().unique().tolist())
-        if 'PI' in df_dados.columns: lista_pi = sorted(df_dados['PI'].dropna().unique().tolist())
-        if 'SIGLA-MUNICIPIO' in df_dados.columns: lista_mun = sorted(df_dados['SIGLA-MUNICIPIO'].dropna().unique().tolist())
-        if 'ID DO NUMERO' in df_dados.columns: lista_id = sorted([str(x).replace('.0', '') for x in df_dados['ID DO NUMERO'].dropna().unique().tolist()])
+    return novos_processados
 
-        if 'TIPO DE OBRA NO SISCO' in df_dados.columns and 'SIGLA' in df_dados.columns:
-            df_to = df_dados.dropna(subset=['TIPO DE OBRA NO SISCO', 'SIGLA'])
-            map_tipo_obra = dict(zip(df_to['TIPO DE OBRA NO SISCO'].astype(str).apply(remover_acentos), df_to['SIGLA'].astype(str).str.strip().str.upper()))
-            
-        if 'MUNICIPIO' in df_dados.columns and 'SIGLA.1' in df_dados.columns:
-            df_mu = df_dados.dropna(subset=['MUNICIPIO', 'SIGLA.1'])
-            map_mun = dict(zip(df_mu['MUNICIPIO'].astype(str).apply(remover_acentos), df_mu['SIGLA.1'].astype(str).str.strip().str.upper()))
-else:
-    st.warning(f"⚠️ Planilha '{arquivo_bd}' não encontrada no mesmo diretório do sistema.")
+@st.cache_data(show_spinner=False)
+def carregar_banco_redes():
+    try:
+        conn = sqlite3.connect("database/redes.db")
+        df = pd.read_sql("SELECT * FROM malha", conn)
+        conn.close()
+        if not df.empty:
+            def safe_json_loads(x):
+                try: return json.loads(x)
+                except: return None
+            df['COORDS'] = df['COORDS'].apply(safe_json_loads)
+            df = df.dropna(subset=['COORDS'])
+        return df
+    except:
+        return pd.DataFrame()
 
-c1, c2, c3, c4 = st.columns([0.8, 1.8, 2.5, 2.0])
-
-# ==========================================
-# COLUNA 1 - SOLICITAÇÕES EM LOTE E FILTRO
-# ==========================================
-with c1:
-    st.markdown('<div class="eh">🎯 SOLICITAÇÕES</div>', unsafe_allow_html=True)
-    
-    st.markdown("<div style='padding: 8px 0px;'>", unsafe_allow_html=True)
-    notas_associadas = st.checkbox("NOTAS ASSOCIADAS", value=True)
-    notas_vu = st.checkbox("NOTAS VU (VISITA ÚNICA)", value=False, key="notas_vu")
-    utilizar_notas_canc_finl = st.checkbox("UTILIZAR NOTAS CANC/FINL", value=False, key="utilizar_notas_canc_finl")
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    sols_input = st.text_area("Cole as notas", key="text_area_obras", height=300, placeholder="Cole as notas aqui...", label_visibility="collapsed")
-    
-    solicitacoes = []
-    notas_removidas = []
-    
-    if sols_input and sols_input.strip():
-        parts = [p.strip() for p in re.split(r'[\s,;]+', sols_input.strip()) if p.strip()]
+@st.cache_data(show_spinner=False)
+def carregar_e_cruzar_obras(file_mtime=None):
+    # file_mtime participa da chave do cache para invalidar automaticamente ao substituir o Excel.
+    file_path = "BASE_LEVANTAMENTO_ATUALIZADA.xlsx"
+    if not os.path.exists(file_path): return "Arquivo 'BASE_LEVANTAMENTO_ATUALIZADA.xlsx' não encontrado.", None, None, None
         
-        # === NOVO: QUADRO LIST/SISCO GERADO AUTOMATICAMENTE ===
-        if parts:
-            st.markdown('<div style="font-size: 11px; font-weight: 700; color: #0284c7; margin-top: -5px; margin-bottom: 2px;">📋 LIST/SISCO (Copie no botão acima à direita):</div>', unsafe_allow_html=True)
-            st.code("; ".join(parts), language="text")
+    try:
+        df_obras = pd.read_excel(file_path)
+        status_sisco_col = next((c for c in df_obras.columns if 'STATUS SISCO' in str(c).upper()), None)
+        status_list_col = next((c for c in df_obras.columns if 'STATUS LIST' in str(c).upper()), None)
+        lat_col = next((c for c in df_obras.columns if 'LATITUDE' in str(c).upper() or 'LAT' == str(c).upper()), None)
+        lon_col = next((c for c in df_obras.columns if 'LONGITUDE' in str(c).upper() or 'LON' == str(c).upper()), None)
         
-        notas_processadas = []
-        for sol in parts:
-            fase_sol = ""
-            pi_sol = ""
-            status_sap_temp = ""
+        if not all([status_sisco_col, status_list_col, lat_col, lon_col]):
+            return "Erro: Colunas obrigatórias ausentes na planilha (Status ou Coordenadas).", None, None, None
             
-            if not df_notas.empty:
-                r_n = df_notas[df_notas['PROTOCOLO'] == sol]
-                if not r_n.empty:
-                    f_temp = str(r_n.iloc[0].get('FASE', '')).upper()
-                    if f_temp not in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']:
-                        fase_sol = f_temp
-                    pi_sol = str(r_n.iloc[0].get('TIPO LIGAÇÃO', r_n.iloc[0].get('TIPO NOTA', '')))
-                    status_sap_temp = str(r_n.iloc[0].get('STATUS SAP', '')).strip().upper()
-
-            if not fase_sol: fase_sol = "MO"
-            
-            if pi_sol.lower() == 'nan':
-                pi_sol = ""
-
-            # Por padrão, notas CANC/FINL continuam sendo removidas como antes.
-            # Quando UTILIZAR NOTAS CANC/FINL estiver marcada, elas entram normalmente
-            # em toda a lógica da ferramenta, inclusive ordem, dados, descrições e nomes.
-            if status_sap_temp in ['CANC', 'FINL'] and not utilizar_notas_canc_finl:
-                notas_removidas.append(f"❌ {sol} ({status_sap_temp})")
-            else:
-                notas_processadas.append({'sol': sol, 'fase': fase_sol, 'pi': pi_sol.strip().upper()})
-            
-        pis_alvo = ['UNI', 'UNR', 'UNP', 'UNU', 'UNO', 'UNJ']
-        aplicar_regra_tr = any(n['pi'] in pis_alvo for n in notas_processadas)
-        
-        if notas_associadas and aplicar_regra_tr:
-            tr_notes = [n['sol'] for n in notas_processadas if n['fase'] == 'TR']
-            outras_notes = [n['sol'] for n in notas_processadas if n['fase'] != 'TR']
-            
-            if tr_notes:
-                escolhida_tr = random.choice(tr_notes)
-                tr_notes.remove(escolhida_tr)
-                solicitacoes = [escolhida_tr] + tr_notes + outras_notes
-            else:
-                solicitacoes = [n['sol'] for n in notas_processadas]
+        mun_col = next((c for c in df_obras.columns if 'MUNICIPIO' in str(c).upper() or 'CIDADE' in str(c).upper()), None)
+        if mun_col:
+            df_obras['MUNICIPIO_NORM'] = df_obras[mun_col].apply(lambda x: remove_accents(str(x)).upper().strip() if pd.notnull(x) else "DESCONHECIDO")
         else:
-            solicitacoes = [n['sol'] for n in notas_processadas]
+            df_obras['MUNICIPIO_NORM'] = "DESCONHECIDO"
+            
+        base_map = load_base_mapping()
+        df_obras['REGIONAL_NORM'] = df_obras['MUNICIPIO_NORM'].map(base_map).fillna("DESCONHECIDO")
 
-        # ------------------------------------------------------
-        # ALERTA AUTOMÁTICO: OBRA CONCLUÍDA EM ATÉ 50 METROS
-        # A verificação usa tudo que foi digitado no campo SOLICITAÇÕES,
-        # inclusive quando há várias notas coladas de uma vez.
-        # ------------------------------------------------------
-        conflitos_50m = detectar_conflitos_concluidos_50m(df_notas, parts, raio_m=50.0)
-        st.session_state["conflitos_50m_sgo"] = conflitos_50m
+        data_col = next((c for c in df_obras.columns if 'DATA ABERTURA' in str(c).upper()), None)
+        if data_col: df_obras['DATA_DT'] = pd.to_datetime(df_obras[data_col], errors='coerce')
+        else: df_obras['DATA_DT'] = pd.NaT
 
-        if conflitos_50m:
-            obras_afetadas = sorted(set(str(x['obra_nova']) for x in conflitos_50m))
-            menor_dist = min(float(x['distancia_m']) for x in conflitos_50m)
+        if df_obras[lat_col].dtype == object: df_obras[lat_col] = df_obras[lat_col].astype(str).str.replace(',', '.')
+        if df_obras[lon_col].dtype == object: df_obras[lon_col] = df_obras[lon_col].astype(str).str.replace(',', '.')
+        df_obras['LAT_CLEAN'] = pd.to_numeric(df_obras[lat_col], errors='coerce')
+        df_obras['LON_CLEAN'] = pd.to_numeric(df_obras[lon_col], errors='coerce')
+        
+        mask_valid_coords = (
+            (df_obras['LAT_CLEAN'].notnull()) & (df_obras['LON_CLEAN'].notnull()) & 
+            (df_obras['LAT_CLEAN'] != 0.0) & (df_obras['LON_CLEAN'] != 0.0) & 
+            (df_obras['LAT_CLEAN'] >= LIMITE_COORD_LAT[0]) & (df_obras['LAT_CLEAN'] <= LIMITE_COORD_LAT[1]) & 
+            (df_obras['LON_CLEAN'] >= LIMITE_COORD_LON[0]) & (df_obras['LON_CLEAN'] <= LIMITE_COORD_LON[1])
+        )
+        total_linhas_base = int(len(df_obras))
+        total_validas_coord = int(mask_valid_coords.sum())
+        df_invalidas = df_obras[~mask_valid_coords].copy()
 
-            st.markdown(
-                '<div class="eh-yellow" style="margin-top:15px;background:#fff1f2;color:#991b1b;border-color:#f87171;">'
-                '🚨 CONFLITO GEOGRÁFICO — OBRA CONCLUÍDA EM ATÉ 50 m'
-                '</div>',
-                unsafe_allow_html=True
+        def motivo_coord_invalida(row):
+            lat = row.get('LAT_CLEAN')
+            lon = row.get('LON_CLEAN')
+            if pd.isna(lat) and pd.isna(lon):
+                return 'LATITUDE E LONGITUDE AUSENTES/INVÁLIDAS'
+            if pd.isna(lat):
+                return 'LATITUDE AUSENTE/INVÁLIDA'
+            if pd.isna(lon):
+                return 'LONGITUDE AUSENTE/INVÁLIDA'
+            if float(lat) == 0.0 and float(lon) == 0.0:
+                return 'COORDENADA ZERADA (0,0)'
+            if float(lat) == 0.0:
+                return 'LATITUDE ZERADA'
+            if float(lon) == 0.0:
+                return 'LONGITUDE ZERADA'
+            if not (-35.0 <= float(lat) <= 5.0) or not (-75.0 <= float(lon) <= -30.0):
+                return 'COORDENADA FORA DO TERRITÓRIO BRASILEIRO'
+            return 'COORDENADA INVÁLIDA'
+
+        if not df_invalidas.empty:
+            df_invalidas['MOTIVO DA INCONSISTÊNCIA'] = df_invalidas.apply(motivo_coord_invalida, axis=1)
+            df_invalidas['NÍVEL'] = 'ERRO FATAL'
+            df_invalidas['_TOTAL_LINHAS_BASE'] = total_linhas_base
+            df_invalidas['_TOTAL_VALIDAS_COORD'] = total_validas_coord
+
+        df_obras = df_obras[mask_valid_coords]
+        
+        # Regra oficial deste fluxo: obra concluída é definida por STATUS LIST = CONCLUIDO.
+        status_list_norm = df_obras[status_list_col].apply(lambda x: remove_accents(str(x)).upper().strip())
+        mask_concluida = status_list_norm.str.contains('CONCLUID', case=False, na=False)
+        df_concluidas = df_obras[mask_concluida].copy()
+        
+        def normalizar(x): return remove_accents(str(x)).upper().strip()
+        df_obras['STATUS_LIST_NORM'] = df_obras[status_list_col].apply(normalizar)
+        status_alvos = ['0', 'EM LEVANTAMENTO', 'ANALISE DE LEVANTAMENTO', 'IMPRODUTIVO', 'CORRECAO DE LEVANTAMENTO']
+        mask_andamento = df_obras['STATUS_LIST_NORM'].isin(status_alvos)
+        df_andamento = df_obras[mask_andamento & (~mask_concluida)].copy()
+        
+        df_andamento['CONFLITO'] = False
+        df_andamento['PROTOCOLO_CONFLITO'] = ""
+        df_andamento['DISTANCIA_CONFLITO'] = 0.0
+        df_andamento['NOME_CONCLUIDA'] = ""
+        df_andamento['LAT_CONCLUIDA_CONFLITO'] = float('nan')
+        df_andamento['LON_CONCLUIDA_CONFLITO'] = float('nan')
+        # Campos adicionais de diagnóstico. A regra principal continua usando a concluída mais próxima.
+        df_andamento['QTD_CONCLUIDAS_50M'] = 0
+        df_andamento['PROTOCOLOS_CONCLUIDOS_50M'] = ''
+        
+        if not df_concluidas.empty and not df_andamento.empty:
+            pts_concluidas = [latlon_to_xyz(row['LAT_CLEAN'], row['LON_CLEAN']) for _, row in df_concluidas.iterrows()]
+            arvore_kdtree = cKDTree(pts_concluidas)
+            c_flags, c_protos, c_dists, c_nomes, c_lats, c_lons = [], [], [], [], [], []
+            c_qtd_50m, c_lista_50m = [], []
+            for _, row in df_andamento.iterrows():
+                xyz = latlon_to_xyz(row['LAT_CLEAN'], row['LON_CLEAN'])
+                _, idx_mais_proximo = arvore_kdtree.query(xyz)
+                obra_concluida_proxima = df_concluidas.iloc[idx_mais_proximo]
+                lat_conc = float(obra_concluida_proxima['LAT_CLEAN'])
+                lon_conc = float(obra_concluida_proxima['LON_CLEAN'])
+                distancia_exata_m = haversine(row['LAT_CLEAN'], row['LON_CLEAN'], lat_conc, lon_conc) * 1000
+
+                # Diagnóstico complementar: quantas concluídas existem no mesmo raio.
+                # Não altera PROTOCOLO_CONFLITO nem a regra da concluída mais próxima.
+                candidatos = arvore_kdtree.query_ball_point(xyz, r=RAIO_CONFLITO_M)
+                protocolos_no_raio = []
+                for idx_cand in candidatos:
+                    cand = df_concluidas.iloc[idx_cand]
+                    d_cand = haversine(row['LAT_CLEAN'], row['LON_CLEAN'], float(cand['LAT_CLEAN']), float(cand['LON_CLEAN'])) * 1000
+                    if d_cand <= RAIO_CONFLITO_M:
+                        protocolos_no_raio.append(str(cand.get('PROTOCOLO', 'S/N')))
+                c_qtd_50m.append(len(protocolos_no_raio))
+                c_lista_50m.append(' | '.join(dict.fromkeys(protocolos_no_raio)))
+
+                if distancia_exata_m <= RAIO_CONFLITO_M:
+                    c_flags.append(True); c_protos.append(str(obra_concluida_proxima.get('PROTOCOLO', 'S/N')))
+                    c_dists.append(distancia_exata_m); c_nomes.append(str(obra_concluida_proxima.get('NOME', 'S/N')))
+                    c_lats.append(lat_conc); c_lons.append(lon_conc)
+                else:
+                    c_flags.append(False); c_protos.append(""); c_dists.append(0.0); c_nomes.append("")
+                    c_lats.append(float('nan')); c_lons.append(float('nan'))
+            df_andamento['CONFLITO'] = c_flags
+            df_andamento['PROTOCOLO_CONFLITO'] = c_protos
+            df_andamento['DISTANCIA_CONFLITO'] = c_dists
+            df_andamento['NOME_CONCLUIDA'] = c_nomes
+            df_andamento['LAT_CONCLUIDA_CONFLITO'] = c_lats
+            df_andamento['LON_CONCLUIDA_CONFLITO'] = c_lons
+            df_andamento['QTD_CONCLUIDAS_50M'] = c_qtd_50m
+            df_andamento['PROTOCOLOS_CONCLUIDOS_50M'] = c_lista_50m
+            
+        return "OK", df_concluidas, df_andamento, df_invalidas
+    except Exception as e: return f"Erro processando dados: {str(e)}", None, None, None
+
+# ==========================================
+# FUNÇÕES AUXILIARES DE DIAGNÓSTICO (ADITIVAS)
+# ==========================================
+@st.cache_data(show_spinner=False)
+def carregar_base_obras_completa(file_mtime=None):
+    caminho = "BASE_LEVANTAMENTO_ATUALIZADA.xlsx"
+    if not os.path.exists(caminho):
+        return pd.DataFrame()
+    try:
+        d = pd.read_excel(caminho)
+        d.columns = [str(c).strip() for c in d.columns]
+        return d
+    except Exception:
+        return pd.DataFrame()
+
+@st.cache_data(show_spinner=False)
+def buscar_protocolo_na_base(protocolo, file_mtime=None):
+    termo = str(protocolo).strip().upper()
+    if not termo:
+        return None
+    d = carregar_base_obras_completa(file_mtime)
+    if d.empty:
+        return None
+    col_p = next((c for c in d.columns if 'PROTOCOLO' in str(c).upper() or str(c).upper() in ['NOTA', 'Nº DA NOTA', 'NUMERO DA NOTA']), None)
+    lat_col = next((c for c in d.columns if 'LATITUDE' in str(c).upper() or str(c).upper() == 'LAT'), None)
+    lon_col = next((c for c in d.columns if 'LONGITUDE' in str(c).upper() or str(c).upper() == 'LON'), None)
+    if not all([col_p, lat_col, lon_col]):
+        return None
+    serie = d[col_p].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
+    achou = d[serie == termo]
+    if achou.empty:
+        achou = d[serie.str.contains(re.escape(termo), na=False)]
+    if achou.empty:
+        return None
+    row = achou.iloc[0].copy()
+    try:
+        lat = float(str(row[lat_col]).replace(',', '.'))
+        lon = float(str(row[lon_col]).replace(',', '.'))
+    except Exception:
+        return {'encontrado': True, 'coordenada_valida': False, 'row': row.to_dict()}
+    valido = (lat != 0 and lon != 0 and LIMITE_COORD_LAT[0] <= lat <= LIMITE_COORD_LAT[1] and LIMITE_COORD_LON[0] <= lon <= LIMITE_COORD_LON[1])
+    return {'encontrado': True, 'coordenada_valida': valido, 'lat': lat, 'lon': lon, 'row': row.to_dict()}
+
+@st.cache_data(show_spinner=False)
+def analisar_qualidade_base(file_mtime=None):
+    d = carregar_base_obras_completa(file_mtime)
+    if d.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    lat_col = next((c for c in d.columns if 'LATITUDE' in str(c).upper() or str(c).upper() == 'LAT'), None)
+    lon_col = next((c for c in d.columns if 'LONGITUDE' in str(c).upper() or str(c).upper() == 'LON'), None)
+    prot_col = next((c for c in d.columns if 'PROTOCOLO' in str(c).upper()), None)
+    mun_col = next((c for c in d.columns if 'MUNICIPIO' in str(c).upper() or 'CIDADE' in str(c).upper()), None)
+    if not lat_col or not lon_col:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    lat = pd.to_numeric(d[lat_col].astype(str).str.replace(',', '.'), errors='coerce')
+    lon = pd.to_numeric(d[lon_col].astype(str).str.replace(',', '.'), errors='coerce')
+    d2 = d.copy()
+    d2['_LAT_Q'] = lat; d2['_LON_Q'] = lon
+    valid = lat.notna() & lon.notna() & (lat != 0) & (lon != 0) & lat.between(*LIMITE_COORD_LAT) & lon.between(*LIMITE_COORD_LON)
+    d2['_COORD_VALIDA'] = valid
+    dup_coords = d2[valid & d2.duplicated(subset=['_LAT_Q','_LON_Q'], keep=False)].copy()
+    dup_prot = pd.DataFrame()
+    if prot_col:
+        ps = d2[prot_col].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        d2['_PROTO_Q'] = ps
+        dup_prot = d2[ps.ne('') & ps.ne('nan') & ps.duplicated(keep=False)].copy()
+    qualidade_mun = pd.DataFrame()
+    if mun_col:
+        tmp = pd.DataFrame({'MUNICIPIO': d2[mun_col].fillna('DESCONHECIDO').astype(str), 'VALIDA': valid.astype(int)})
+        qualidade_mun = tmp.groupby('MUNICIPIO', as_index=False).agg(TOTAL=('VALIDA','size'), VALIDAS=('VALIDA','sum'))
+        qualidade_mun['QUALIDADE_%'] = (qualidade_mun['VALIDAS'] / qualidade_mun['TOTAL'] * 100).round(1)
+    return dup_coords, dup_prot, qualidade_mun
+
+def _distancia_aprox_poligono_m(lat, lon, ring):
+    if is_point_in_polygon(lon, lat, ring):
+        return 0.0
+    menor = float('inf')
+    # Distância aos vértices é usada apenas como diagnóstico aproximado; a regra de interseção existente não muda.
+    for pt in ring[::max(1, len(ring)//200)]:
+        try:
+            menor = min(menor, haversine(lat, lon, float(pt[1]), float(pt[0])) * 1000)
+        except Exception:
+            pass
+    return menor
+
+def analisar_proximidade_areas_especiais(lat, lon, limite_m=500.0):
+    resultados = []
+    for categoria, geo_d in dict_areas_especiais.items():
+        if not geo_d:
+            continue
+        melhor = float('inf'); melhor_nome = ''
+        for feat in geo_d.get('features', []):
+            geom = feat.get('geometry', {})
+            nome = feat.get('properties', {}).get('NOME', 'Sem Nome')
+            if geom.get('type') == 'Polygon':
+                for ring in geom.get('coordinates', []):
+                    d = _distancia_aprox_poligono_m(lat, lon, ring)
+                    if d < melhor:
+                        melhor, melhor_nome = d, nome
+            elif geom.get('type') == 'Point':
+                try:
+                    pt_lon, pt_lat = geom.get('coordinates', [None, None])
+                    d = haversine(lat, lon, float(pt_lat), float(pt_lon)) * 1000
+                    if d < melhor:
+                        melhor, melhor_nome = d, nome
+                except Exception:
+                    pass
+        if melhor <= limite_m:
+            faixa = 'Dentro da área' if melhor <= 1 else ('Até 100 m' if melhor <= 100 else '100–500 m')
+            resultados.append({'categoria': categoria, 'nome': melhor_nome, 'distancia_m_aprox': melhor, 'faixa': faixa})
+    return resultados
+
+def formatar_resumo_filtros(regioes, municipios, alimentadores, statuses):
+    partes = []
+    if regioes: partes.append('Regional: ' + ', '.join(regioes))
+    if municipios: partes.append('Município: ' + ', '.join(municipios[:4]) + ('…' if len(municipios) > 4 else ''))
+    if alimentadores: partes.append(f'Alimentadores: {len(alimentadores)} selecionado(s)')
+    if statuses: partes.append('Status: ' + ', '.join(statuses))
+    return ' | '.join(partes) if partes else 'Nenhum filtro geográfico/status aplicado'
+
+# ==========================================
+# 2. ESTRUTURA DA TELA E CONTAINERS
+# ==========================================
+st.markdown("<h2 style='color: #0D256C;'>🗺️ Gestão de Malha Elétrica e Obras (Inteligência Geográfica)</h2>", unsafe_allow_html=True)
+
+# Foco opcional recebido da página CRIAR SGO.
+# Quando existe conflito em até 50 m, a página já abre enquadrando as obras envolvidas.
+foco_mapa_sgo = st.session_state.get("foco_mapa_conflito")
+if foco_mapa_sgo and foco_mapa_sgo.get('conflitos'):
+    conflitos_recebidos = foco_mapa_sgo.get('conflitos', [])
+    obras_recebidas = foco_mapa_sgo.get('obras_digitadas', [])
+    menor_distancia = min(float(x.get('distancia_m', 999999)) for x in conflitos_recebidos)
+    st.error(
+        f"🚨 Conflito recebido do CRIAR SGO: {len(obras_recebidas)} solicitação(ões) "
+        f"com obra concluída em até 50 m. Menor distância: {menor_distancia:.1f} m."
+    )
+    if st.button("↩️ Limpar foco do CRIAR SGO", key="limpar_foco_sgo_mapa"):
+        st.session_state.pop("foco_mapa_conflito", None)
+        st.rerun()
+
+kpi_container = st.container()
+map_container = st.container()
+table_container = st.container()
+
+df = carregar_banco_redes()
+base_map = load_base_mapping()
+geo_data_ibge = get_base_geojson()
+
+# ==========================================
+# PREPARAÇÃO DAS ÁREAS ESPECIAIS
+# ==========================================
+def preprocessar_bboxes_kml(geo_data):
+    if not geo_data: return
+    for feat in geo_data['features']:
+        geom = feat['geometry']
+        if geom['type'] == 'Polygon':
+            bboxes = []
+            for ring in geom['coordinates']:
+                lons = [pt[0] for pt in ring]
+                lats = [pt[1] for pt in ring]
+                bboxes.append((min(lons), max(lons), min(lats), max(lats)))
+            feat['bboxes'] = bboxes
+
+geo_q = get_kml_cached("Áreas Quilombolas.kml", "#ff7f00"); preprocessar_bboxes_kml(geo_q)
+geo_i = get_kml_cached("Terras Indigenas.kml", "#2ca02c"); preprocessar_bboxes_kml(geo_i)
+geo_a = get_kml_cached("Sítios Arqueológicos.kml", "#8c564b"); preprocessar_bboxes_kml(geo_a)
+geo_uc_fed = get_kml_cached("UC Federal.kml", "#e6b800"); preprocessar_bboxes_kml(geo_uc_fed)
+geo_uc_est = get_kml_cached("UC Estadual.kml", "#ffff00"); preprocessar_bboxes_kml(geo_uc_est)
+geo_uc_mun = get_kml_cached("UC Municipal.kml", "#ffff00"); preprocessar_bboxes_kml(geo_uc_mun)
+
+dict_areas_especiais = {
+    "Quilombo": geo_q, "Terra Indígena": geo_i, "Sítio Arqueológico": geo_a,
+    "UC Federal": geo_uc_fed, "UC Estadual": geo_uc_est, "UC Municipal": geo_uc_mun
+}
+
+def verificar_areas_da_obra(lat, lon):
+    encontradas = []
+    for categoria, geo_data in dict_areas_especiais.items():
+        if not geo_data: continue
+        for feat in geo_data['features']:
+            geom = feat['geometry']
+            nome = feat['properties'].get('NOME', 'Sem Nome')
+            if geom['type'] == 'Polygon':
+                for i, ring in enumerate(geom['coordinates']):
+                    if 'bboxes' in feat:
+                        min_lon, max_lon, min_lat, max_lat = feat['bboxes'][i]
+                        if (min_lon <= lon <= max_lon) and (min_lat <= lat <= max_lat):
+                            if is_point_in_polygon(lon, lat, ring):
+                                encontradas.append(f"<b>{categoria}:</b> {html.escape(nome)}")
+                                break
+            elif geom['type'] == 'Point':
+                pt_lon, pt_lat = geom['coordinates']
+                if haversine(lat, lon, pt_lat, pt_lon) * 1000 <= RAIO_ARQUEOLOGIA_M:
+                    encontradas.append(f"<b>{categoria}:</b> {html.escape(nome)} (Raio {int(RAIO_ARQUEOLOGIA_M)}m)")
+    return "<br>".join(encontradas) if encontradas else "Nenhuma restrição"
+
+# ==========================================
+# 3. INTERFACE E SINCRONIZAÇÃO VIA GITHUB
+# ==========================================
+with st.sidebar:
+    # ------------------------------------------
+    # CONTROLES RÁPIDOS / PRESETS
+    # ------------------------------------------
+    with st.expander("⚙️ Visualizações Rápidas", expanded=True):
+        p1, p2 = st.columns(2)
+        if p1.button("🚨 Conflitos", use_container_width=True, key="preset_conflitos"):
+            st.session_state.update({
+                'chk_todas_obras': False, 'chk_concluidas': True, 'chk_conflitantes': True,
+                'mostrar_status_0': False, 'mostrar_status_em_levantamento': False,
+                'mostrar_status_analise_levantamento': False, 'mostrar_status_improdutivo': False,
+                'mostrar_status_correcao_levantamento': False,
+            })
+            st.rerun()
+        if p2.button("⚡ Malha", use_container_width=True, key="preset_malha"):
+            st.session_state.update({
+                'chk_todas_obras': False, 'chk_concluidas': False, 'chk_conflitantes': False,
+                'mostrar_status_0': False, 'mostrar_status_em_levantamento': False,
+                'mostrar_status_analise_levantamento': False, 'mostrar_status_improdutivo': False,
+                'mostrar_status_correcao_levantamento': False,
+                'chk_quilombos': False, 'chk_indigenas': False, 'chk_arqueologia': False,
+                'chk_uc_federal': False, 'chk_uc_estadual': False, 'chk_uc_municipal': False,
+            })
+            st.rerun()
+        p3, p4 = st.columns(2)
+        if p3.button("🌳 Restrições", use_container_width=True, key="preset_restricoes"):
+            st.session_state.update({
+                'chk_quilombos': True, 'chk_indigenas': True, 'chk_arqueologia': True,
+                'chk_uc_federal': True, 'chk_uc_estadual': True, 'chk_uc_municipal': True,
+                'chk_todas_obras': True,
+            })
+            st.rerun()
+        if p4.button("📍 Todas Obras", use_container_width=True, key="preset_todas"):
+            st.session_state.update({'chk_todas_obras': True, 'chk_concluidas': False, 'chk_conflitantes': False})
+            st.rerun()
+
+        if st.button("↩️ Restaurar visualização padrão", use_container_width=True, key="reset_visualizacao"):
+            chaves_limpar = [
+                'filtro_regionais','filtro_municipios','filtro_alimentadores','busca_nome_rede',
+                'busca_lat','busca_lon','busca_protocolo','foco_mapa_conflito',
+                'chk_todas_obras','chk_concluidas','chk_conflitantes','mostrar_status_0',
+                'mostrar_status_em_levantamento','mostrar_status_analise_levantamento',
+                'mostrar_status_improdutivo','mostrar_status_correcao_levantamento',
+                'chk_quilombos','chk_indigenas','chk_arqueologia','chk_uc_federal',
+                'chk_uc_estadual','chk_uc_municipal','somente_restricoes','limite_redes_mapa'
+            ]
+            for k in chaves_limpar:
+                st.session_state.pop(k, None)
+            st.rerun()
+
+    with st.expander("📥 1. Banco de Dados e Sincronização", expanded=True):
+        st.markdown("A ferramenta lê as redes automaticamente da pasta **`kmzs`** no repositório.")
+        pasta_kmz = "kmzs"
+        if not os.path.exists(pasta_kmz):
+            os.makedirs(pasta_kmz, exist_ok=True)
+            
+        arquivos_repositorio = [f for f in os.listdir(pasta_kmz) if f.lower().endswith(('.kmz', '.kml'))]
+        alims_no_banco = set(df['ALIMENTADOR'].tolist()) if not df.empty else set()
+        
+        arquivos_novos = []
+        for f in arquivos_repositorio:
+            nome_alim = f.upper().replace('.KMZ', '').replace('.KML', '')
+            if nome_alim not in alims_no_banco:
+                arquivos_novos.append(f)
+                
+        if arquivos_novos:
+            st.info(f"📂 {len(arquivos_novos)} arquivo(s) novo(s) na pasta '{pasta_kmz}' aguardando processamento.")
+            
+            if st.button(f"🚀 Sincronizar {len(arquivos_novos)} Novas Redes", type="primary", use_container_width=True):
+                class LocalFileAdapter:
+                    def __init__(self, filepath):
+                        self.name = os.path.basename(filepath)
+                        self.filepath = filepath
+                    def getvalue(self):
+                        with open(self.filepath, 'rb') as f:
+                            return f.read()
+                            
+                lista_adapters = [LocalFileAdapter(os.path.join(pasta_kmz, f)) for f in arquivos_novos]
+                
+                qtd_total_processados = 0
+                tamanho_lote = 15
+                total_lotes = math.ceil(len(lista_adapters) / tamanho_lote)
+                barra_progresso = st.progress(0.0)
+                texto_status = st.empty()
+                inicio_sync = time.time()
+                
+                for i in range(0, len(lista_adapters), tamanho_lote):
+                    lote_atual = (i // tamanho_lote) + 1
+                    lote_arquivos = lista_adapters[i:i+tamanho_lote]
+                    texto_status.text(f"⏳ Processando e Salvando Lote {lote_atual} de {total_lotes}...")
+                    qtd_total_processados += processar_e_salvar_kmz_paralelo(lote_arquivos)
+                    barra_progresso.progress(lote_atual / total_lotes)
+                    gc.collect()
+
+                duracao_sync = time.time() - inicio_sync
+                qtd_falhas = max(0, len(lista_adapters) - qtd_total_processados)
+                st.session_state['_ultima_sincronizacao'] = {
+                    'quando': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+                    'arquivos': len(lista_adapters),
+                    'processados': qtd_total_processados,
+                    'falhas': qtd_falhas,
+                    'duracao_s': round(duracao_sync, 1),
+                }
+                if qtd_total_processados > 0:
+                    st.success(f"✅ Sincronização finalizada! {qtd_total_processados} redes salvas em {duracao_sync:.1f}s. Falhas/ignorados: {qtd_falhas}.")
+                    carregar_banco_redes.clear()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning(f"⚠️ Nenhuma rede nova foi gravada. Verifique os {qtd_falhas} arquivo(s) processados/ignorados.")
+        else:
+            st.success(f"✅ O banco de dados está atualizado.")
+        if st.session_state.get('_ultima_sincronizacao'):
+            us = st.session_state['_ultima_sincronizacao']
+            st.caption(f"Última sincronização: {us.get('quando')} | {us.get('processados', 0)}/{us.get('arquivos', 0)} processados | {us.get('falhas', 0)} falhas/ignorados | {us.get('duracao_s', 0)}s")
+
+    with st.expander("🔎 2. Pesquisas Inteligentes", expanded=False):
+        tab_nome, tab_coord, tab_obra = st.tabs(["📝 Por Nome/ID", "📍 Por Coordenada", "🏗️ Por Protocolo"])
+        termo_pesquisa, busca_lat, busca_lon, protocolo_pesquisa = "", None, None, ""
+        with tab_nome:
+            termo_pesquisa = st.text_input("Nome/Num. Poste ou Trafo:", placeholder="Ex: 554930...", key="busca_nome_rede").strip().upper()
+        with tab_coord:
+            c_lat, c_lon = st.columns(2)
+            with c_lat: lat_input = st.text_input("Latitude:", placeholder="Ex: -5.532", key="busca_lat")
+            with c_lon: lon_input = st.text_input("Longitude:", placeholder="Ex: -47.432", key="busca_lon")
+            if lat_input and lon_input:
+                try:
+                    b_lat, b_lon = float(lat_input.replace(',', '.').strip()), float(lon_input.replace(',', '.').strip())
+                    if LIMITE_COORD_LAT[0] <= b_lat <= LIMITE_COORD_LAT[1] and LIMITE_COORD_LON[0] <= b_lon <= LIMITE_COORD_LON[1]: busca_lat, busca_lon = b_lat, b_lon
+                    else: st.warning("⚠️ Coordenada fora do Brasil.")
+                except: st.warning("⚠️ Formato inválido.")
+        with tab_obra:
+            protocolo_pesquisa = st.text_input("Nº da Nota / Protocolo:", placeholder="Ex: 430163831", key="busca_protocolo").strip().upper()
+            st.caption("Ao localizar uma coordenada válida, o mapa centraliza e destaca a obra sem alterar os filtros existentes.")
+
+    with st.expander("🔍 3. Filtros Geográficos", expanded=True):
+        lista_regioes = sorted(list(set(base_map.values()))) if base_map else ["CENTRO", "LESTE", "NOROESTE", "NORTE", "SUL"]
+        regioes_sel = st.multiselect("📍 Regional:", lista_regioes, key="filtro_regionais")
+        
+        lista_municipios = []
+        for mun, reg in base_map.items():
+            if not regioes_sel or reg in regioes_sel: lista_municipios.append(mun)
+        municipios_sel = st.multiselect("🏙️ Município (Foco e Contorno):", sorted(lista_municipios), key="filtro_municipios")
+        
+        df_filt = df.copy()
+        if not df.empty:
+            if regioes_sel: df_filt = df_filt[df_filt['REGIONAL'].isin(regioes_sel)]
+            if municipios_sel: df_filt = df_filt[df_filt['MUNICIPIO'].isin(municipios_sel)]
+        
+        lista_alimentadores = sorted(df_filt['ALIMENTADOR'].unique().tolist()) if not df_filt.empty else []
+        alim_sel = st.multiselect("⚡ Alimentador:", lista_alimentadores, key="filtro_alimentadores")
+        
+        if 'limite_redes_mapa' not in st.session_state:
+            st.session_state['limite_redes_mapa'] = LIMITE_REDES_SIMULTANEAS_PADRAO
+        limite_redes_atual = int(st.session_state.get('limite_redes_mapa', LIMITE_REDES_SIMULTANEAS_PADRAO))
+        if not alim_sel:
+            if len(lista_alimentadores) > limite_redes_atual:
+                st.warning(f"⚠️ **Proteção de Memória:** {len(lista_alimentadores)} redes detectadas. Exibindo {limite_redes_atual}. Use os filtros ou carregue mais redes gradualmente.")
+                alimentadores_visiveis = lista_alimentadores[:limite_redes_atual]
+                ca, cb = st.columns(2)
+                if ca.button("➕ Carregar +15", use_container_width=True, key="mais_15_redes"):
+                    st.session_state['limite_redes_mapa'] = min(len(lista_alimentadores), limite_redes_atual + 15)
+                    st.rerun()
+                if limite_redes_atual > LIMITE_REDES_SIMULTANEAS_PADRAO and cb.button("↩️ Voltar para 15", use_container_width=True, key="voltar_15_redes"):
+                    st.session_state['limite_redes_mapa'] = LIMITE_REDES_SIMULTANEAS_PADRAO
+                    st.rerun()
+            else:
+                alimentadores_visiveis = lista_alimentadores
+            st.caption(f"Redes visíveis: {len(alimentadores_visiveis)} de {len(lista_alimentadores)}")
+        else:
+            alimentadores_visiveis = alim_sel
+
+    camadas_ativas = {}
+    if not df.empty and alimentadores_visiveis:
+        with st.expander("🗂️ 4. Camadas (Desempenho)", expanded=False):
+            for alim in alimentadores_visiveis:
+                st.markdown(f"**{alim}**")
+                lista_camadas_alim = sorted(df[df['ALIMENTADOR'] == alim]['TIPO_REDE'].unique().tolist())
+                camadas_essenciais = ['REDE PRIMÁRIA', 'REDE PRIMARIA', 'REDE SECUNDÁRIA', 'REDE SECUNDARIA', 'TRANSFORMADOR', 'POSTE']
+                camadas_default = [c for c in lista_camadas_alim if c in camadas_essenciais]
+                camadas_ativas[alim] = st.multiselect("Visibilidade das Camadas:", lista_camadas_alim, default=camadas_default, key=f"ms_{alim}")
+            
+    with st.expander("🗺️ 5. Áreas Especiais", expanded=False):
+        mostrar_quilombos = st.checkbox("🟠 Áreas Quilombolas", value=False, key="chk_quilombos")
+        mostrar_indigenas = st.checkbox("🟢 Terras Indígenas", value=False, key="chk_indigenas")
+        mostrar_arqueologia = st.checkbox("🟤 Sítios Arqueológicos", value=False, key="chk_arqueologia")
+        mostrar_uc_federal = st.checkbox("🟡 UC Federal", value=False, key="chk_uc_federal")
+        mostrar_uc_estadual = st.checkbox("🟡 UC Estadual", value=False, key="chk_uc_estadual")
+        mostrar_uc_municipal = st.checkbox("🟡 UC Municipal", value=False, key="chk_uc_municipal")
+
+        status_kml = {
+            "Áreas Quilombolas": geo_q,
+            "Terras Indígenas": geo_i,
+            "Sítios Arqueológicos": geo_a,
+            "UC Federal": geo_uc_fed,
+            "UC Estadual": geo_uc_est,
+            "UC Municipal": geo_uc_mun,
+        }
+        carregados = [nome for nome, geo in status_kml.items() if geo and geo.get('features')]
+        ausentes = [nome for nome, geo in status_kml.items() if not geo or not geo.get('features')]
+        if carregados:
+            st.caption("✅ KML carregados: " + ", ".join(carregados))
+        if ausentes:
+            st.warning("⚠️ KML sem dados/carregamento: " + ", ".join(ausentes))
+        if st.session_state.get('_kml_erros'):
+            with st.expander("Detalhes técnicos dos KML"):
+                for nome, erro in st.session_state['_kml_erros'].items():
+                    st.code(f"{nome}: {erro}")
+    
+    with st.expander("🚧 6. Obras e Projetos", expanded=True):
+        mostrar_todas_obras = st.checkbox("📍 TODAS AS OBRAS (Clusters)", value=False, key="chk_todas_obras")
+        mostrar_concluidas = st.checkbox("🔵 OBRAS CONCLUÍDAS", value=False, key="chk_concluidas") 
+        mostrar_conflitantes = st.checkbox(f"🚨 OBRAS CONFLITANTES (Raio {int(RAIO_CONFLITO_M)}m)", value=False, key="chk_conflitantes")
+
+        st.markdown("---")
+        mostrar_status_0 = st.checkbox("⚪ STATUS LIST: 0", value=False, key="mostrar_status_0")
+        mostrar_em_levantamento = st.checkbox("🟢 STATUS LIST: EM LEVANTAMENTO", value=False, key="mostrar_status_em_levantamento")
+        mostrar_analise_levantamento = st.checkbox("🟡 STATUS LIST: ANÁLISE DE LEVANTAMENTO", value=False, key="mostrar_status_analise_levantamento")
+        mostrar_improdutivo = st.checkbox("🟠 STATUS LIST: IMPRODUTIVO", value=False, key="mostrar_status_improdutivo")
+        mostrar_correcao_levantamento = st.checkbox("🟣 STATUS LIST: CORREÇÃO DE LEVANTAMENTO", value=False, key="mostrar_status_correcao_levantamento")
+        somente_restricoes = st.checkbox("🌳 SOMENTE OBRAS COM RESTRIÇÃO/PROXIMIDADE ESPECIAL", value=False, key="somente_restricoes", help="Filtro adicional. Não altera a regra de conflito; apenas mantém obras dentro ou até 500 m das áreas especiais carregadas.")
+
+        # Mantém uma lista interna apenas para o processamento do mapa.
+        # Para o usuário, cada STATUS LIST aparece como uma caixa de marcação independente.
+        status_list_sel = []
+        if mostrar_status_0:
+            status_list_sel.append("0")
+        if mostrar_em_levantamento:
+            status_list_sel.append("EM LEVANTAMENTO")
+        if mostrar_analise_levantamento:
+            status_list_sel.append("ANÁLISE DE LEVANTAMENTO")
+        if mostrar_improdutivo:
+            status_list_sel.append("IMPRODUTIVO")
+        if mostrar_correcao_levantamento:
+            status_list_sel.append("CORREÇÃO DE LEVANTAMENTO")
+        
+        msg_obras, df_concluidas, df_andamento, df_invalidas = "OK", None, None, None
+        if mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel) or bool(foco_mapa_sgo) or bool(protocolo_pesquisa) or somente_restricoes:
+            obras_mtime = _mtime_seguro("BASE_LEVANTAMENTO_ATUALIZADA.xlsx")
+            msg_obras, df_concluidas, df_andamento, df_invalidas = carregar_e_cruzar_obras(obras_mtime)
+            if msg_obras != "OK": st.sidebar.warning(f"⚠️ {msg_obras}")
+            else:
+                if regioes_sel:
+                    if df_concluidas is not None and not df_concluidas.empty: df_concluidas = df_concluidas[df_concluidas['REGIONAL_NORM'].isin(regioes_sel)]
+                    if df_andamento is not None and not df_andamento.empty: df_andamento = df_andamento[df_andamento['REGIONAL_NORM'].isin(regioes_sel)]
+                    if df_invalidas is not None and not df_invalidas.empty: df_invalidas = df_invalidas[df_invalidas['REGIONAL_NORM'].isin(regioes_sel)]
+                if municipios_sel:
+                    if df_concluidas is not None and not df_concluidas.empty: df_concluidas = df_concluidas[df_concluidas['MUNICIPIO_NORM'].isin(municipios_sel)]
+                    if df_andamento is not None and not df_andamento.empty: df_andamento = df_andamento[df_andamento['MUNICIPIO_NORM'].isin(municipios_sel)]
+                    if df_invalidas is not None and not df_invalidas.empty: df_invalidas = df_invalidas[df_invalidas['MUNICIPIO_NORM'].isin(municipios_sel)]
+
+                # Filtro opcional por STATUS LIST. A normalização remove acentos para
+                # casar corretamente com a coluna STATUS_LIST_NORM gerada na leitura.
+                if status_list_sel and df_andamento is not None and not df_andamento.empty:
+                    status_norm_sel = [remove_accents(x).upper().strip() for x in status_list_sel]
+                    df_andamento = df_andamento[df_andamento['STATUS_LIST_NORM'].isin(status_norm_sel)]
+
+                # Filtro opcional de restrições: cálculo paralelo, sem interferir no motor de conflitos.
+                if somente_restricoes:
+                    def _filtrar_restricao(dfx):
+                        if dfx is None or dfx.empty:
+                            return dfx
+                        mask = dfx.apply(lambda r: bool(analisar_proximidade_areas_especiais(float(r['LAT_CLEAN']), float(r['LON_CLEAN']), 500.0)), axis=1)
+                        return dfx[mask].copy()
+                    df_concluidas = _filtrar_restricao(df_concluidas)
+                    df_andamento = _filtrar_restricao(df_andamento)
+
+                qtd_conflitos = df_andamento['CONFLITO'].sum() if df_andamento is not None else 0
+                st.caption(f"🔵 Concluídas: {len(df_concluidas) if df_concluidas is not None else 0} | 🟢/🟡/🟠/🟣 Em análise: {len(df_andamento) if df_andamento is not None else 0} | 🚨 Conflitos: {int(qtd_conflitos)}")
+                
+    with st.expander("🗑️ 7. Gerenciar Malha Local", expanded=False):
+        alim_para_deletar = st.selectbox("Apagar Alimentador do Banco:", ["Selecione..."] + sorted(df['ALIMENTADOR'].unique().tolist()) if not df.empty else ["Selecione..."], key="alim_excluir")
+        if alim_para_deletar != "Selecione...":
+            qtd_elementos_excluir = int((df['ALIMENTADOR'] == alim_para_deletar).sum()) if not df.empty else 0
+            st.warning(f"⚠️ {alim_para_deletar}: {qtd_elementos_excluir:,} elemento(s) serão removidos do SQLite.".replace(',', '.'))
+            confirmar_exclusao = st.checkbox("Confirmo a exclusão deste alimentador", key="confirmar_exclusao_alim")
+            if st.button("❌ Excluir Permanentemente", use_container_width=True, disabled=not confirmar_exclusao, key="btn_excluir_alim"):
+                db_path = "database/redes.db"
+                if os.path.exists(db_path):
+                    os.makedirs("database/backups", exist_ok=True)
+                    backup_path = os.path.join("database", "backups", f"redes_antes_exclusao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+                    shutil.copy2(db_path, backup_path)
+                conn = sqlite3.connect(db_path)
+                c = conn.cursor()
+                c.execute("DELETE FROM malha WHERE ALIMENTADOR = ?", (alim_para_deletar,))
+                conn.commit()
+                conn.close()
+                carregar_banco_redes.clear()
+                st.success(f"✅ Alimentador excluído. Backup preventivo criado em {backup_path if os.path.exists(db_path) else 'database/backups' }.")
+                time.sleep(1)
+                st.rerun()
+
+# ==========================================
+# DIAGNÓSTICO OPERACIONAL E FILTROS ATIVOS
+# ==========================================
+obras_mtime_diag = _mtime_seguro("BASE_LEVANTAMENTO_ATUALIZADA.xlsx")
+dup_coords_diag, dup_prot_diag, qualidade_mun_diag = analisar_qualidade_base(obras_mtime_diag)
+
+with st.expander("🩺 Diagnóstico do Sistema", expanded=False):
+    d1, d2, d3, d4 = st.columns(4)
+    d1.metric("Base de obras", "OK" if os.path.exists("BASE_LEVANTAMENTO_ATUALIZADA.xlsx") else "AUSENTE")
+    d2.metric("Municípios/Regionais", "OK" if os.path.exists("MUNICIPIOS-REGIONAIS.xlsx") else "AUSENTE")
+    d3.metric("SQLite", "OK" if os.path.exists("database/redes.db") else "AUSENTE")
+    d4.metric("Alimentadores", len(df['ALIMENTADOR'].unique()) if not df.empty else 0)
+    kml_ok = sum(1 for g in [geo_q, geo_i, geo_a, geo_uc_fed, geo_uc_est, geo_uc_mun] if g and g.get('features'))
+    kml_erro = 6 - kml_ok
+    e1, e2, e3, e4 = st.columns(4)
+    e1.metric("KML válidos", kml_ok)
+    e2.metric("KML ausentes/erro", kml_erro)
+    e3.metric("Coords. duplicadas", len(dup_coords_diag))
+    e4.metric("Protocolos repetidos", len(dup_prot_diag))
+    if os.path.exists("BASE_LEVANTAMENTO_ATUALIZADA.xlsx"):
+        st.caption("Última alteração da base: " + datetime.fromtimestamp(obras_mtime_diag).strftime('%d/%m/%Y %H:%M:%S'))
+    if st.session_state.get('_ultima_sincronizacao'):
+        st.caption("Última sincronização da malha: " + str(st.session_state['_ultima_sincronizacao']))
+
+resumo_filtros_ativos = formatar_resumo_filtros(regioes_sel, municipios_sel, alim_sel, status_list_sel)
+st.info("🔎 **Filtros ativos:** " + resumo_filtros_ativos)
+
+st.markdown(
+    """
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin:4px 0 14px 0;font-size:12px;">
+      <span style="padding:6px 10px;border-radius:999px;background:#dbeafe;">🔵 Concluída</span>
+      <span style="padding:6px 10px;border-radius:999px;background:#fee2e2;">🔴 Conflito / raio 50 m</span>
+      <span style="padding:6px 10px;border-radius:999px;background:#dcfce7;">🟢 Em levantamento</span>
+      <span style="padding:6px 10px;border-radius:999px;background:#fef9c3;">🟡 Análise de levantamento</span>
+      <span style="padding:6px 10px;border-radius:999px;background:#ffedd5;">🟠 Improdutivo</span>
+      <span style="padding:6px 10px;border-radius:999px;background:#ede9fe;">🟣 Correção de levantamento</span>
+      <span style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">⚪ Status 0</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# ==========================================
+# DASHBOARD DE INDICADORES E GRÁFICOS
+# ==========================================
+def render_kpi(icone, titulo, valor, cor_borda):
+    return f"""
+    <div style="background-color: white; border-radius: 8px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 6px solid {cor_borda}; text-align: left; height: 100%;">
+        <p style="margin: 0; font-size: 14px; color: #666; font-weight: 600;">{icone} {titulo}</p>
+        <p style="margin: 0; font-size: 32px; color: #222; font-weight: 800; padding-top: 5px;">{valor}</p>
+    </div>
+    """
+
+with kpi_container:
+    c1, c2, c3, c4 = st.columns(4)
+    val_alim = len(df['ALIMENTADOR'].unique()) if not df.empty else 0
+    val_conc = len(df_concluidas) if df_concluidas is not None else 0
+    val_anda = len(df_andamento) if df_andamento is not None else 0
+    val_conf = df_andamento['CONFLITO'].sum() if df_andamento is not None else 0
+    
+    c1.markdown(render_kpi("⚡", "ALIMENTADORES MAPEADOS", val_alim, "#808080"), unsafe_allow_html=True)
+    c2.markdown(render_kpi("🔵", "OBRAS CONCLUÍDAS", val_conc, "#1f77b4"), unsafe_allow_html=True)
+    c3.markdown(render_kpi("🟢", "OBRAS EM ANDAMENTO", val_anda, "#2ca02c"), unsafe_allow_html=True)
+    c4.markdown(render_kpi("🚨", "CONFLITOS (50m)", val_conf, "#d62728"), unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if msg_obras == "OK" and val_conf > 0:
+        df_conf = df_andamento[df_andamento['CONFLITO']].copy()
+        if not df_conf.empty:
+            st.markdown("### 📊 Análise dos Conflitos")
+            st.caption("Visão gerencial das cidades, status e criticidade das obras sobrepostas em até 50 metros.")
+
+            # Padroniza os status usados nos gráficos para as mesmas nomenclaturas do mapa.
+            def _status_dashboard(valor):
+                s = remove_accents(str(valor)).upper().strip()
+                if s in ['', 'NAN', 'NONE', 'SEM INFORMACAO']:
+                    return '0'
+                if s == '0':
+                    return '0'
+                if 'CORRECAO DE LEVANTAMENTO' in s:
+                    return 'Correção de levantamento'
+                if 'ANALISE DE LEVANTAMENTO' in s:
+                    return 'Análise de levantamento'
+                if 'IMPRODUTIVO' in s:
+                    return 'Improdutivo'
+                if 'EM LEVANTAMENTO' in s:
+                    return 'Em levantamento'
+                return str(valor).strip() or '0'
+
+            df_conf['_STATUS_DASH'] = df_conf['STATUS LIST'].apply(_status_dashboard)
+            df_conf['_DIST_M'] = pd.to_numeric(df_conf['DISTANCIA_CONFLITO'], errors='coerce').fillna(0.0)
+            df_conf['_SEVERIDADE_DASH'] = df_conf['_DIST_M'].apply(classificar_severidade_distancia)
+
+            # Controle do ranking sem poluir o gráfico quando há muitos municípios.
+            top_opt = st.radio(
+                "Quantidade de cidades no ranking:",
+                ["Top 10", "Top 15", "Todos"],
+                horizontal=True,
+                index=0,
+                key="ranking_cidades_conflito"
             )
+            limite_top = 10 if top_opt == "Top 10" else (15 if top_opt == "Top 15" else None)
 
-            linhas_alerta = []
-            for item in conflitos_50m:
-                linhas_alerta.append(
-                    f"<div style='padding:6px 0;border-bottom:1px solid #fecaca;'>"
-                    f"<b>Solicitação {item['obra_nova']}</b> → "
-                    f"obra concluída <b>{item['obra_concluida']}</b> "
-                    f"a <b>{item['distancia_m']:.1f} m</b>"
-                    f"<br><span style='font-size:10px;color:#7f1d1d;'>"
-                    f"STATUS LIST: {item['status_list_concluida']}"
-                    f"{(' | ' + item['municipio_concluida']) if item['municipio_concluida'] else ''}"
-                    f"</span></div>"
+            # ---------- Linha 1: Cidades + Status ----------
+            col_chart1, col_chart2 = st.columns(2, gap="large")
+            with col_chart1:
+                df_barras = (
+                    df_conf['MUNICIPIO_NORM']
+                    .fillna('SEM MUNICÍPIO')
+                    .replace('', 'SEM MUNICÍPIO')
+                    .value_counts()
+                    .rename_axis('Município')
+                    .reset_index(name='Conflitos')
+                )
+                if limite_top is not None:
+                    df_barras = df_barras.head(limite_top)
+                # Para barra horizontal, ordem crescente coloca o maior no topo visual.
+                df_barras_plot = df_barras.sort_values('Conflitos', ascending=True)
+                total_conf = max(1, int(len(df_conf)))
+                df_barras_plot['Percentual'] = (df_barras_plot['Conflitos'] / total_conf * 100).round(1)
+                df_barras_plot['Rótulo'] = df_barras_plot.apply(
+                    lambda r: f"{int(r['Conflitos'])} ({r['Percentual']:.1f}%)", axis=1
                 )
 
-            st.markdown(
-                "<div class='list-box' style='min-height:60px;background:#fff7f7;color:#7f1d1d;'>"
-                + "".join(linhas_alerta)
-                + "</div>",
-                unsafe_allow_html=True
-            )
-            st.caption(
-                f"{len(obras_afetadas)} solicitação(ões) digitada(s) com conflito; "
-                f"{len(conflitos_50m)} ocorrência(s) concluída(s) encontrada(s). "
-                f"Menor distância: {menor_dist:.1f} m."
-            )
+                fig1 = px.bar(
+                    df_barras_plot,
+                    x='Conflitos',
+                    y='Município',
+                    orientation='h',
+                    title="📍 Cidades com Mais Conflitos",
+                    text='Rótulo',
+                    color_discrete_sequence=['#d62728']
+                )
+                fig1.update_traces(
+                    textposition='outside',
+                    hovertemplate='<b>%{y}</b><br>Conflitos: %{x}<extra></extra>'
+                )
+                fig1.update_layout(
+                    xaxis_title="Quantidade de conflitos",
+                    yaxis_title="",
+                    showlegend=False,
+                    height=max(360, 28 * len(df_barras_plot) + 120),
+                    margin=dict(l=10, r=55, t=55, b=30)
+                )
+                st.plotly_chart(fig1, use_container_width=True)
 
-            if st.button("🗺️ ABRIR CONFLITO NO MAPA", type="primary", use_container_width=True, key="abrir_conflito_mapa_sgo"):
-                st.session_state["foco_mapa_conflito"] = {
-                    'raio_m': 50.0,
-                    'obras_digitadas': obras_afetadas,
-                    'conflitos': conflitos_50m,
+            with col_chart2:
+                ordem_status = ['0', 'Em levantamento', 'Análise de levantamento', 'Improdutivo', 'Correção de levantamento']
+                cores_status = {
+                    '0': '#94a3b8',
+                    'Em levantamento': '#22c55e',
+                    'Análise de levantamento': '#eab308',
+                    'Improdutivo': '#f97316',
+                    'Correção de levantamento': '#7c3aed'
                 }
-                st.switch_page("pages/3_MAPA.py")
-        else:
-            st.session_state.pop("foco_mapa_conflito", None)
-            st.success("✅ Nenhuma obra com STATUS LIST = CONCLUIDO foi encontrada no raio de 50 m das solicitações informadas.")
+                df_status = (
+                    df_conf['_STATUS_DASH']
+                    .value_counts()
+                    .rename_axis('Status')
+                    .reset_index(name='Quantidade')
+                )
+                df_status['Status'] = pd.Categorical(df_status['Status'], categories=ordem_status, ordered=True)
+                df_status = df_status.sort_values('Status').dropna(subset=['Status'])
+
+                fig2 = px.pie(
+                    df_status,
+                    names='Status',
+                    values='Quantidade',
+                    title="📊 Status das Obras Sobrepostas",
+                    hole=0.58,
+                    color='Status',
+                    color_discrete_map=cores_status,
+                    category_orders={'Status': ordem_status}
+                )
+                fig2.update_traces(
+                    textposition='inside',
+                    textinfo='percent',
+                    hovertemplate='<b>%{label}</b><br>Quantidade: %{value}<br>Percentual: %{percent}<extra></extra>'
+                )
+                fig2.add_annotation(
+                    text=f"<b>{len(df_conf)}</b><br>Conflitos",
+                    x=0.5, y=0.5, showarrow=False,
+                    font=dict(size=17)
+                )
+                fig2.update_layout(
+                    legend_title_text='STATUS LIST',
+                    height=max(360, 28 * len(df_barras_plot) + 120),
+                    margin=dict(l=10, r=10, t=55, b=20)
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # ---------- Linha 2: Severidade + Cidade x Severidade ----------
+            col_chart3, col_chart4 = st.columns(2, gap="large")
+            with col_chart3:
+                ordem_sev = ['📌 Mesmo ponto (≈0 m)', '🔴 Crítico (≤ 10 m)', '🟠 Alto (10–25 m)', '🟡 Médio (25–50 m)']
+                cores_sev = {
+                    '📌 Mesmo ponto (≈0 m)': '#7f1d1d',
+                    '🔴 Crítico (≤ 10 m)': '#dc2626',
+                    '🟠 Alto (10–25 m)': '#f97316',
+                    '🟡 Médio (25–50 m)': '#eab308'
+                }
+                df_sev = (
+                    df_conf['_SEVERIDADE_DASH']
+                    .value_counts()
+                    .reindex(ordem_sev, fill_value=0)
+                    .rename_axis('Severidade')
+                    .reset_index(name='Quantidade')
+                )
+                fig3 = px.bar(
+                    df_sev,
+                    x='Severidade',
+                    y='Quantidade',
+                    title="🚨 Conflitos por Faixa de Distância",
+                    color='Severidade',
+                    color_discrete_map=cores_sev,
+                    text='Quantidade',
+                    category_orders={'Severidade': ordem_sev}
+                )
+                fig3.update_traces(
+                    textposition='outside',
+                    hovertemplate='<b>%{x}</b><br>Conflitos: %{y}<extra></extra>'
+                )
+                fig3.update_layout(
+                    xaxis_title="",
+                    yaxis_title="Quantidade de conflitos",
+                    showlegend=False,
+                    height=390,
+                    margin=dict(l=10, r=20, t=55, b=70)
+                )
+                st.plotly_chart(fig3, use_container_width=True)
+
+            with col_chart4:
+                cidades_top = df_barras['Município'].tolist()
+                df_city_sev = df_conf[df_conf['MUNICIPIO_NORM'].isin(cidades_top)].copy()
+                df_city_sev['MUNICIPIO_NORM'] = df_city_sev['MUNICIPIO_NORM'].fillna('SEM MUNICÍPIO').replace('', 'SEM MUNICÍPIO')
+                pivot = (
+                    df_city_sev.groupby(['MUNICIPIO_NORM', '_SEVERIDADE_DASH'])
+                    .size()
+                    .unstack(fill_value=0)
+                    .reindex(columns=ordem_sev, fill_value=0)
+                )
+                # Ordena pelo total de conflitos para manter leitura gerencial.
+                pivot['_TOTAL'] = pivot.sum(axis=1)
+                pivot = pivot.sort_values('_TOTAL', ascending=True).drop(columns=['_TOTAL']).reset_index()
+                df_stack = pivot.melt(
+                    id_vars='MUNICIPIO_NORM',
+                    value_vars=ordem_sev,
+                    var_name='Severidade',
+                    value_name='Quantidade'
+                )
+                fig4 = px.bar(
+                    df_stack,
+                    x='Quantidade',
+                    y='MUNICIPIO_NORM',
+                    orientation='h',
+                    color='Severidade',
+                    title="🏙️ Cidade × Severidade",
+                    color_discrete_map=cores_sev,
+                    category_orders={'Severidade': ordem_sev}
+                )
+                fig4.update_layout(
+                    barmode='stack',
+                    xaxis_title="Quantidade de conflitos",
+                    yaxis_title="",
+                    legend_title_text='Severidade',
+                    height=max(390, 28 * len(pivot) + 120),
+                    margin=dict(l=10, r=20, t=55, b=30)
+                )
+                fig4.update_traces(hovertemplate='<b>%{y}</b><br>%{fullData.name}: %{x}<extra></extra>')
+                st.plotly_chart(fig4, use_container_width=True)
+
+# Busca direta de protocolo/nota. É independente do motor de conflitos.
+resultado_protocolo = None
+protocolo_zoom_lat = protocolo_zoom_lon = None
+if protocolo_pesquisa:
+    resultado_protocolo = buscar_protocolo_na_base(protocolo_pesquisa, _mtime_seguro("BASE_LEVANTAMENTO_ATUALIZADA.xlsx"))
+    if not resultado_protocolo:
+        st.sidebar.warning("⚠️ Protocolo/nota não localizado na base de obras.")
+    elif not resultado_protocolo.get('coordenada_valida'):
+        st.sidebar.warning("⚠️ Protocolo localizado, mas sem coordenada válida para posicionar no mapa.")
     else:
-        st.session_state.pop("conflitos_50m_sgo", None)
-
-    if notas_removidas:
-        st.markdown('<div class="eh-yellow" style="margin-top: 15px; background-color: #fef2f2; color: #991b1b; border-color: #fca5a5;">⚠️ OBRAS CANCELADAS / FINALIZADAS</div>', unsafe_allow_html=True)
-        removidas_str = "<br>".join(notas_removidas)
-        st.markdown(f'<div class="list-box" style="min-height: 50px; color: #dc2626; background-color: #fef2f2;">{removidas_str}</div>', unsafe_allow_html=True)
-
-cc, instalacao, fase, tipo_obra_sisco, data_abertura, lat, lon, status_sap = "", "", "", "", "", "", "", ""
-cidade_auto, cliente_auto, endereco_auto, localidade_auto, area_resp, reg_raw, obs = "", "", "", "", "", "", ""
-obs_extra, id_sisco, prioridade, levantador = "", "", "", ""
-pi_auto, gerente, executivo, empresa, contrato, tecnico, data_aprov = "", "", "", "", "", "", ""
-responsavel_obra, tipo_nota_parceiro, valor_previsto = "", "", ""
-obra_relampago_formatada = ""
-
-descricoes_list = []
-nomes_obras_list = []
+        protocolo_zoom_lat = float(resultado_protocolo['lat'])
+        protocolo_zoom_lon = float(resultado_protocolo['lon'])
+        st.sidebar.success(f"🎯 Obra localizada em {protocolo_zoom_lat:.6f}, {protocolo_zoom_lon:.6f}")
 
 # ==========================================
-# EXTRAÇÃO DE DADOS APENAS DA ABA NOTAS E DADOS
+# 4. CONSTRUÇÃO DO MAPA FOLIUM E SIMBOLOGIA
 # ==========================================
-if solicitacoes and not df_notas.empty:
-    solicitacao_principal = solicitacoes[0]
-    resultado_notas = df_notas[df_notas['PROTOCOLO'] == solicitacao_principal]
-    
-    if not resultado_notas.empty:
-        r_notas = resultado_notas.iloc[0]
-        
-        cc = str(r_notas.get('CONTA CONTRATO', '')).replace('.0', '')
-        if cc.lower() == 'nan': cc = ""
-            
-        instalacao = str(r_notas.get('INSTALAÇÃO', '')).replace('.0', '')
-        if instalacao.lower() == 'nan': instalacao = ""
-            
-        fase = str(r_notas.get('FASE', '')).upper()
-        if fase in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']: fase = "MO"
-            
-        tipo_obra_raw = str(r_notas.get('TIPO NOTA', ''))
-        if tipo_obra_raw.lower() == 'nan': tipo_obra_raw = ""
-        parts = tipo_obra_raw.replace("-", " ").strip().split(" ")
-        tipo_obra_sisco = " ".join(parts[:3]) if len(parts) > 3 else tipo_obra_raw
-            
-        data_abertura_raw = str(r_notas.get('DATA ABERTURA', r_notas.get('DATA DA SOLICITAÇÃO', '')))
-        data_abertura = formatar_data(data_abertura_raw)
-            
-        status_sap = str(r_notas.get('STATUS SAP', ''))
-        if status_sap.lower() == 'nan': status_sap = ""
-            
-        lat = str(r_notas.get('LATITUDE', ''))
-        if lat.lower() == 'nan': lat = ""
-        
-        lon = str(r_notas.get('LONGITUDE', ''))
-        if lon.lower() == 'nan': lon = ""
-        
-        cidade_raw = str(r_notas.get('MUNICIPIO', ''))
-        if cidade_raw.lower() == 'nan': cidade_raw = ""
-        cidade_auto = remover_acentos(cidade_raw)
-        
-        cliente_auto = str(r_notas.get('NOME DO SOLICITANTE', r_notas.get('NOME', ''))).upper()
-        if cliente_auto.lower() == 'NAN': cliente_auto = ""
-            
-        endereco_auto = str(r_notas.get('ENDEREÇO', ''))
-        if endereco_auto.lower() == 'nan': endereco_auto = ""
-        
-        localidade_auto = str(r_notas.get('LOCALIDADE', ''))
-        if localidade_auto.lower() == 'nan': localidade_auto = ""
+mapa = folium.Map(location=[-5.2, -45.0], zoom_start=6, tiles=None, prefer_canvas=True)
 
-        id_sisco = str(r_notas.get('ID SISCO', '')).replace('.0', '')
-        if id_sisco.lower() == 'nan': id_sisco = ""
+if protocolo_zoom_lat is not None and protocolo_zoom_lon is not None:
+    row_busca = (resultado_protocolo or {}).get('row', {})
+    nome_busca = str(row_busca.get('NOME', row_busca.get('NOME DA OBRA', 'S/N')))
+    status_busca = str(row_busca.get('STATUS LIST', 'S/N'))
+    mun_busca = str(row_busca.get('MUNICIPIO', row_busca.get('MUNICÍPIO', 'S/N')))
+    popup_busca = f"""
+    <div style='min-width:260px;font-family:sans-serif;'>
+      <h4 style='margin:0 0 8px 0;color:#0D256C;border-bottom:2px solid #0D256C;padding-bottom:5px;'>🏗️ OBRA LOCALIZADA</h4>
+      <b>PROTOCOLO:</b> {html.escape(protocolo_pesquisa)}<br>
+      <b>NOME:</b> {html.escape(nome_busca)}<br>
+      <b>STATUS LIST:</b> {html.escape(status_busca)}<br>
+      <b>MUNICÍPIO:</b> {html.escape(mun_busca)}<br>
+      <b>COORDENADAS:</b> {protocolo_zoom_lat:.6f}, {protocolo_zoom_lon:.6f}
+    </div>
+    """
+    folium.Marker(
+        [protocolo_zoom_lat, protocolo_zoom_lon],
+        tooltip=f"Obra: {html.escape(protocolo_pesquisa)}",
+        popup=folium.Popup(popup_busca, max_width=340),
+        icon=folium.Icon(color='cadetblue', icon='search', prefix='fa')
+    ).add_to(mapa)
 
-        prioridade = str(r_notas.get('PRIORIDADE', ''))
-        if prioridade.lower() == 'nan': prioridade = ""
-        
-        levantador = str(r_notas.get('LEVANTADOR', ''))
-        if levantador.lower() == 'nan': levantador = ""
+mapa.add_child(MeasureControl(position='topleft', primary_length_unit='meters', primary_area_unit='sqmeters'))
+Draw(export=False, position='topleft').add_to(mapa)
 
-        pi_auto = str(r_notas.get('TIPO LIGAÇÃO', r_notas.get('TIPO NOTA', '')))
-        if pi_auto.lower() == 'nan': pi_auto = ""
-            
-        reg_raw = str(r_notas.get('REGIONAL', '')).upper()
-        if reg_raw.lower() == 'NAN': reg_raw = ""
-        
-        # Leitura Direta Exclusiva com Função Blindada
-        obs = buscar_info(r_notas, ['INFORMACOES'])
-        obs_extra = buscar_info(r_notas, ['INFORMACOESEXTRAS'])
-        
-    else:
-        st.toast(f"❌ A nota principal '{solicitacao_principal}' não foi encontrada.")
+js_draw_loc = """
+<script>
+    setTimeout(function() {
+        try {
+            if (typeof L !== 'undefined' && L.drawLocal && L.drawLocal.draw && L.drawLocal.draw.toolbar) {
+                L.drawLocal.draw.toolbar.actions.title = 'Cancelar desenho';
+                L.drawLocal.draw.toolbar.actions.text = 'Cancelar';
+                L.drawLocal.draw.toolbar.finish.title = 'Finalizar desenho';
+                L.drawLocal.draw.toolbar.finish.text = 'Finalizar';
+                L.drawLocal.draw.toolbar.undo.title = 'Desfazer último ponto';
+                L.drawLocal.draw.toolbar.undo.text = 'Desfazer';
+                L.drawLocal.draw.toolbar.buttons.polygon = 'Desenhar um polígono';
+                L.drawLocal.draw.toolbar.buttons.polyline = 'Desenhar uma linha';
+                L.drawLocal.draw.toolbar.buttons.rectangle = 'Desenhar um retângulo';
+                L.drawLocal.draw.toolbar.buttons.circle = 'Desenhar um círculo';
+                L.drawLocal.draw.toolbar.buttons.marker = 'Adicionar um marcador';
+                L.drawLocal.draw.toolbar.buttons.circlemarker = 'Adicionar marcador circular';
+            }
+            if (typeof L !== 'undefined' && L.drawLocal && L.drawLocal.edit && L.drawLocal.edit.toolbar) {
+                L.drawLocal.edit.toolbar.actions.save.title = 'Salvar alterações';
+                L.drawLocal.edit.toolbar.actions.save.text = 'Salvar';
+                L.drawLocal.edit.toolbar.actions.cancel.title = 'Cancelar edição';
+                L.drawLocal.edit.toolbar.actions.cancel.text = 'Cancelar';
+                L.drawLocal.edit.toolbar.actions.clearAll.title = 'Apagar todos os desenhos';
+                L.drawLocal.edit.toolbar.actions.clearAll.text = 'Apagar Tudo';
+            }
+        } catch (e) { console.log("Folium Draw Erro: ", e); }
+    }, 500);
+</script>
+"""
+mapa.get_root().html.add_child(folium.Element(js_draw_loc))
 
-# ==========================================
-# 3. PAINEL DE DADOS E FORMULÁRIO DE OVERRIDE
-# ==========================================
-with c2:
-    st.markdown(f"""
-    <div class="eh">🎲 DADOS</div>
-    <table class="et">
-        <tr><td class="lbl">Conta Contrato</td><td class="val">{cc}</td></tr>
-        <tr><td class="lbl">Instalação CCS</td><td class="val">{instalacao}</td></tr>
-        <tr><td class="lbl">Tipo de Obra</td><td class="val">{tipo_obra_sisco}</td></tr>
-        <tr><td class="lbl">Status SAP</td><td class="val">{status_sap}</td></tr>
-        <tr><td class="lbl">Data Abertura</td><td class="val">{data_abertura}</td></tr>
-        <tr><td class="lbl">Fase</td><td class="val">{fase}</td></tr>
-        <tr><td class="lbl">Localidade</td><td class="val">{localidade_auto}</td></tr>
-        <tr><td class="lbl">ID Sisco</td><td class="val">{id_sisco}</td></tr>
-        <tr><td class="lbl">Prioridade</td><td class="val">{prioridade}</td></tr>
-        <tr><td class="lbl">Levantador</td><td class="val">{levantador}</td></tr>
-        <tr><td class="lbl text-blue">LATITUDE</td><td class="val">{lat}</td></tr>
-        <tr><td class="lbl text-blue">LONGITUDE</td><td class="val">{lon}</td></tr>
-        <tr><td class="lbl text-blue" style="background-color: #f0fdf4;">LAT / LONG</td><td class="val" style="background-color: #f0fdf4;">{lat},{lon}</td></tr>
-    </table>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="eh-yellow" style="margin-bottom: 0px;">🚧 Criar Nome da Obra Manual 🚧</div>', unsafe_allow_html=True)
-    
-    def criar_linha_input(label, widget_type, key, options=None):
-        cA, cB = st.columns([1, 2.5], gap="small")
-        with cA:
-            st.markdown(f'<div class="lbl-box">{label}</div>', unsafe_allow_html=True)
-        with cB:
-            if widget_type == "select":
-                return st.selectbox("", options, key=key, label_visibility="collapsed")
+folium.TileLayer(tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite (Google Maps)', overlay=False, control=True, max_zoom=20).add_to(mapa)
+folium.TileLayer(tiles='OpenStreetMap', name='Mapa Base (Limpo)', overlay=False, control=True, max_zoom=20).add_to(mapa)
+folium.TileLayer(
+    tiles='https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attr='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+    name='Mapa Base (Escuro - Foco em Redes)',
+    overlay=False,
+    control=True,
+    max_zoom=20
+).add_to(mapa)
+
+if geo_data_ibge:
+    def style_function(feature):
+        reg_mun = feature['properties'].get('MUNICIPIO', '')
+        reg_name = feature['properties'].get('REGIONAL', '')
+        cor_regiao = feature['properties']['fillColor']
+        if municipios_sel:
+            if reg_mun in municipios_sel: return {'fillColor': cor_regiao, 'color': '#FF00FF', 'weight': 3, 'fillOpacity': 0.1}
+            else: return {'fillColor': 'transparent', 'color': 'transparent', 'weight': 0}
+        elif regioes_sel:
+            if reg_name in regioes_sel: return {'fillColor': cor_regiao, 'color': cor_regiao, 'weight': 1, 'fillOpacity': 0.1}
+            else: return {'fillColor': 'transparent', 'color': 'transparent', 'weight': 0}
+        return {'fillColor': 'transparent', 'color': cor_regiao, 'weight': 1, 'fillOpacity': 0.0}
+
+    folium.GeoJson(geo_data_ibge, name="Divisão IBGE (Maranhão)", style_function=style_function, tooltip=folium.features.GeoJsonTooltip(fields=['name', 'REGIONAL'], aliases=['Município:', 'Regional:'], style="background-color: white; color: #333; font-family: arial; font-size: 12px; padding: 10px;"), zoom_on_click=False, show=True).add_to(mapa)
+
+todas_lats, todas_lons = [], []
+busca_lats, busca_lons = [], []
+
+if not df.empty:
+    df_mapa = df.copy()
+    if regioes_sel: df_mapa = df_mapa[df_mapa['REGIONAL'].isin(regioes_sel)]
+    if municipios_sel: df_mapa = df_mapa[df_mapa['MUNICIPIO'].isin(municipios_sel)]
+    df_mapa = df_mapa[df_mapa['ALIMENTADOR'].isin(alimentadores_visiveis)]
+
+    mask_camadas = pd.Series(False, index=df_mapa.index)
+    for alim in alimentadores_visiveis:
+        if alim in camadas_ativas: mask_camadas = mask_camadas | ((df_mapa['ALIMENTADOR'] == alim) & (df_mapa['TIPO_REDE'].isin(camadas_ativas[alim])))
+    df_mapa = df_mapa[mask_camadas]
+
+    grid_pts, grid_info = [], []
+    if not df_mapa.empty:
+        for idx, row in df_mapa.iterrows():
+            if row['TIPO_GEOMETRIA'] == 'Ponto':
+                pt_lat, pt_lon = row['COORDS'][0], row['COORDS'][1]
+                grid_pts.append(latlon_to_xyz(pt_lat, pt_lon))
+                grid_info.append((row['TIPO_REDE'], row['NOME'], pt_lat, pt_lon))
             else:
-                return st.text_input("", key=key, label_visibility="collapsed")
+                for pt in row['COORDS']:
+                    pt_lat, pt_lon = pt[0], pt[1]
+                    grid_pts.append(latlon_to_xyz(pt_lat, pt_lon))
+                    grid_info.append((row['TIPO_REDE'], row['NOME'], pt_lat, pt_lon))
+    tree_grid = cKDTree(grid_pts) if grid_pts else None
 
-    with st.container():
-        man_especial = criar_linha_input("Obra Especial ?", "select", "i1", ["", "OE-Obras Juridicas e/ou Especiais", "EX-Exceções"])
-        man_tipo_obra = criar_linha_input("Tipo de Obra", "select", "i2", [""] + lista_tipos_obra)
-        man_pi = criar_linha_input("PI", "select", "i3", [""] + lista_pi)
-        man_mun = criar_linha_input("Municipio", "select", "i4", [""] + lista_mun)
-        man_id = criar_linha_input("ID do Numero", "select", "i5", [""] + lista_id)
-        man_sol = criar_linha_input("Solicitação", "text", "i6")
-        man_livre = criar_linha_input("Escrita Livre", "text", "i7")
-        man_endereco = criar_linha_input("Endereço", "text", "i8")
-        man_cc = criar_linha_input("Conta Contrato", "text", "i9")
+    df_busca = pd.DataFrame()
+    nearest_idx = None
 
-# ==========================================
-# 4. LÓGICA DE CRUZAMENTO DE DADOS E OVERRIDES MANUAIS
-# ==========================================
-pi_ativo = man_pi if man_pi else pi_auto
-
-# Repasses Manuais para a Tabela SGO
-if man_mun:
-    cidade_auto = man_mun.split('-', 1)[1] if '-' in man_mun else man_mun
-if man_livre:
-    cliente_auto = man_livre.upper()
-if man_endereco:
-    endereco_auto = man_endereco.upper()
-if man_cc:
-    cc = man_cc
-
-if man_mun and not df_dados.empty and 'SIGLA-MUNICIPIO' in df_dados.columns:
-    dados_mun = df_dados[df_dados['SIGLA-MUNICIPIO'] == man_mun]
-    if not dados_mun.empty:
-        reg_raw = str(dados_mun.iloc[0].get('REGIONAL', '')).upper()
-
-regional_formatado = ""
-regional_label = "Regional"
-col_idx = 0
-
-if reg_raw:
-    if "SUL" in reg_raw: 
-        regional_formatado = "CM04-IMPERATRIZ"; col_idx = 14; regional_label = "Regional Sul"
-    elif "CENTRO" in reg_raw: 
-        regional_formatado = "CM03-BACABAL"; col_idx = 19; regional_label = "Regional Centro"
-    elif "LESTE" in reg_raw: 
-        regional_formatado = "CM02-TIMON"; col_idx = 24; regional_label = "Regional Leste"
-    elif "NORTE" in reg_raw: 
-        regional_formatado = "CM01-SAO LUIS"; col_idx = 4; regional_label = "Regional Norte"
-    elif "NOROESTE" in reg_raw: 
-        regional_formatado = "CM01-PINHEIRO"; col_idx = 9; regional_label = "Regional Noroeste"
-
-area_resp = ""
-if pi_ativo and not df_dados.empty and 'PI' in df_dados.columns:
-    dados_pi = df_dados[df_dados['PI'] == pi_ativo]
-    if not dados_pi.empty:
-        r_dados = dados_pi.iloc[0]
-        
-        area_resp_nova = str(r_dados.get('TIPO', ''))
-        if area_resp_nova.lower() != 'nan' and area_resp_nova != "":
-            area_resp = area_resp_nova.upper()
+    if busca_lat is not None and busca_lon is not None and not df_mapa.empty:
+        pts, indices = [], []
+        for idx, row in df_mapa.iterrows():
+            if row['TIPO_GEOMETRIA'] == 'Ponto':
+                pts.append(latlon_to_xyz(row['COORDS'][0], row['COORDS'][1]))
+                indices.append(idx)
+            else:
+                for pt in row['COORDS']:
+                    pts.append(latlon_to_xyz(pt[0], pt[1]))
+                    indices.append(idx)
+                    
+        if pts:
+            tree = cKDTree(pts)
+            target_xyz = latlon_to_xyz(busca_lat, busca_lon)
+            dist_3d, min_idx_in_pts = tree.query(target_xyz)
+            nearest_idx = indices[min_idx_in_pts]
             
-        tipo_nota_parceiro = str(r_dados.get('TIPO DE NS|PARCEIRO', ''))
-        responsavel_obra = str(r_dados.get('RESP. OBRA', ''))
-        
-        qtd_dias_str = str(r_dados.get('QTD DIAS', '')).replace('.0', '').strip()
-        
-        if qtd_dias_str.isdigit():
-            dias_int = int(qtd_dias_str)
-            nova_data_calc = datetime.date.today() + datetime.timedelta(days=dias_int)
-            data_aprov = f"{nova_data_calc.strftime('%d/%m/%Y')} ({dias_int} DIAS)"
-        else:
-            data_aprov_raw = str(r_dados.get('DATA FINAL', ''))
-            data_aprov_formatada = formatar_data(data_aprov_raw)
-            data_aprov = f"{data_aprov_formatada} ({qtd_dias_str} DIAS)" if data_aprov_formatada else ""
-        
-        if pi_ativo in ["UNP", "UNR", "UNI", "UNO", "UNU", "UNJ", "LPT", "MTP", "REG", "ASC", "SID"]:
-            total_val = 7000 * (len(solicitacoes) if solicitacoes else 1)
-        else:
-            total_val = 30000 * (len(solicitacoes) if solicitacoes else 1)
-        valor_previsto = f"R$ {total_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        
-        if col_idx > 0:
-            gerente = str(dados_pi.iloc[0, col_idx])
-            executivo = str(dados_pi.iloc[0, col_idx + 1])
-            empresa = str(dados_pi.iloc[0, col_idx + 2])
-            contrato = str(dados_pi.iloc[0, col_idx + 3]).replace('.0', '')
-            tecnico = str(dados_pi.iloc[0, col_idx + 4])
+            elem_prox = df_mapa.loc[nearest_idx]
+            if elem_prox['TIPO_GEOMETRIA'] == 'Ponto': dist_metros = haversine(busca_lat, busca_lon, elem_prox['COORDS'][0], elem_prox['COORDS'][1]) * 1000
+            else: dist_metros = min([haversine(busca_lat, busca_lon, pt[0], pt[1]) for pt in elem_prox['COORDS']]) * 1000
             
-            if gerente.lower() == 'nan': gerente = ""
-            if executivo.lower() == 'nan': executivo = ""
-            if empresa.lower() == 'nan': empresa = ""
-            if contrato.lower() == 'nan': contrato = ""
-            if tecnico.lower() == 'nan': tecnico = ""
+            st.sidebar.success(f"🎯 **Alvo mais próximo:** {elem_prox['TIPO_REDE']} ({elem_prox['NOME']}) a {dist_metros:.1f} metros.")
+            df_busca = df_mapa.loc[[nearest_idx]]
+            df_mapa = df_mapa.drop(nearest_idx)
 
-if not area_resp: area_resp = ""
+    elif termo_pesquisa != "":
+        mask_nome = df_mapa['NOME'].astype(str).str.contains(termo_pesquisa, case=False, na=False)
+        df_busca = df_mapa[mask_nome]
+        df_mapa = df_mapa[~mask_nome]
 
-# ==========================================
-# 5. GERADOR EM MASSA DOS NOMES E DESCRIÇÕES
-# ==========================================
-def aplicar_marcacao_vu(nome_obra, solicitacao):
-    """
-    Acrescenta VU- somente no nome exibido em NOMES DAS OBRAS.
-    Ex.: CT-UNI-BDC-NS-1114165710-LEONARDO
-      -> CT-UNI-BDC-NS-1114165710-VU-LEONARDO
-    Não altera Obra Relâmpago, descrições SGO ou demais dados.
-    """
-    if not notas_vu or not nome_obra or not solicitacao:
-        return nome_obra
+    dict_cores_render = {
+        'REDE PRIMÁRIA': '#0000FF', 
+        'REDE PRIMARIA': '#0000FF', 
+        'REDE SECUNDÁRIA': '#FF00FF', 
+        'REDE SECUNDARIA': '#FF00FF', 
+        'POSTE': '#808080', 
+        'TRANSFORMADOR': '#FFFF00', 
+    }
 
-    marcador = f"-{solicitacao}-"
-    if marcador in nome_obra and f"-{solicitacao}-VU-" not in nome_obra:
-        return nome_obra.replace(marcador, f"-{solicitacao}-VU-", 1)
+    features_linhas = []
+    features_postes = []
+    features_trafos = []
+    features_outros = []
 
-    return nome_obra
+    for _, row in df_mapa.iterrows():
+        tipo_rede = str(row['TIPO_REDE']).upper()
+        
+        cor_oficial = dict_cores_render.get(tipo_rede, row['COR'])
+        if pd.isna(cor_oficial) or not cor_oficial:
+            cor_oficial = '#333333'
+            
+        if row['TIPO_GEOMETRIA'] == 'Linha':
+            coords = [[pt[1], pt[0]] for pt in row['COORDS']]
+            if len(coords) > 1:
+                features_linhas.append({
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                    "properties": {
+                        "TIPO_REDE": html.escape(tipo_rede), "NOME": html.escape(str(row['NOME'])), "COR": cor_oficial, 
+                        "ALIMENTADOR": html.escape(str(row['ALIMENTADOR'])), "LOC": f"{html.escape(str(row['MUNICIPIO']))} - {html.escape(str(row['REGIONAL']))}"
+                    }
+                })
+                for pt in row['COORDS']: todas_lats.append(pt[0]); todas_lons.append(pt[1])
+        else:
+            lat, lon = row['COORDS'][0], row['COORDS'][1]
+            todas_lats.append(lat); todas_lons.append(lon)
+            
+            feat = {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    "TIPO_REDE": html.escape(tipo_rede), "NOME": html.escape(str(row['NOME'])), "COR": cor_oficial, 
+                    "ALIMENTADOR": html.escape(str(row['ALIMENTADOR'])), "LOC": f"{html.escape(str(row['MUNICIPIO']))} - {html.escape(str(row['REGIONAL']))}",
+                    "GPS": f"{lat:.5f}, {lon:.5f}"
+                }
+            }
+            
+            if 'POSTE' in tipo_rede:
+                features_postes.append(feat)
+            elif 'TRANSFORMADOR' in tipo_rede:
+                features_trafos.append(row)
+            else:
+                features_outros.append(feat)
 
+    if features_linhas:
+        folium.GeoJson(
+            {"type": "FeatureCollection", "features": features_linhas},
+            name="Redes (Linhas)",
+            style_function=lambda x: {'color': x['properties']['COR'], 'weight': 4 if 'PRIM' in x['properties']['TIPO_REDE'] else 3, 'opacity': 0.9},
+            tooltip=folium.features.GeoJsonTooltip(fields=['TIPO_REDE', 'NOME'], aliases=['Rede:', 'Identificação:']),
+            popup=folium.features.GeoJsonPopup(fields=['TIPO_REDE', 'NOME', 'ALIMENTADOR', 'LOC'], aliases=['Rede:', 'Identificação:', 'Alimentador:', 'Localização:'])
+        ).add_to(mapa)
 
-def limitar_nome_obra(nome_obra):
-    """Limita qualquer item exibido em NOMES DAS OBRAS a no máximo 40 caracteres."""
-    return str(nome_obra)[:40] if nome_obra else ""
+    if features_postes:
+        folium.GeoJson(
+            {"type": "FeatureCollection", "features": features_postes},
+            name="Postes",
+            marker=folium.CircleMarker(radius=4, color='black', weight=1, fillColor='gray', fillOpacity=1.0),
+            tooltip=folium.features.GeoJsonTooltip(fields=['TIPO_REDE', 'NOME'], aliases=['Rede:', 'Identificação:']),
+            popup=folium.features.GeoJsonPopup(fields=['TIPO_REDE', 'NOME', 'ALIMENTADOR', 'LOC', 'GPS'], aliases=['Rede:', 'Identificação:', 'Alimentador:', 'Localização:', 'Coordenadas:'])
+        ).add_to(mapa)
 
-pref_especial = f"{man_especial.split('-')[0]}-" if man_especial else ""
-pref_tipo = man_tipo_obra.split('-')[0] if man_tipo_obra else "CT"
-pref_pi = pi_ativo if pi_ativo else "UNR"
-pref_id = man_id.split('-')[0] if man_id else "NS"
+    if features_trafos:
+        fg_trafos = folium.FeatureGroup(name="Transformadores")
+        for row in features_trafos:
+            lat, lon = row['COORDS'][0], row['COORDS'][1]
+            html_popup = f"""
+            <div style="font-family: sans-serif; font-size: 13px; min-width: 250px;">
+                <table style="width:100%;">
+                    <tr><td><b>Rede:</b></td><td>{html.escape(str(row['TIPO_REDE']))}</td></tr>
+                    <tr><td><b>Identificação:</b></td><td>{html.escape(str(row['NOME']))}</td></tr>
+                    <tr><td><b>Alimentador:</b></td><td>{html.escape(str(row['ALIMENTADOR']))}</td></tr>
+                    <tr><td><b>Localização:</b></td><td>{html.escape(str(row['MUNICIPIO']))} - {html.escape(str(row['REGIONAL']))}</td></tr>
+                    <tr><td><b>Coordenadas:</b></td><td>{lat:.5f}, {lon:.5f}</td></tr>
+                </table>
+            </div>
+            """
+            folium.RegularPolygonMarker(
+                location=[lat, lon],
+                number_of_sides=3,
+                radius=8,
+                color='#b8860b', 
+                fillColor='yellow',
+                fillOpacity=0.9,
+                weight=1,
+                tooltip=f"{html.escape(str(row['TIPO_REDE']))}: {html.escape(str(row['NOME']))}",
+                popup=folium.Popup(html_popup, max_width=300)
+            ).add_to(fg_trafos)
+        fg_trafos.add_to(mapa)
 
-if not solicitacoes and (man_tipo_obra or man_pi or man_mun or man_id or man_sol or man_livre or man_endereco or man_cc):
-    pref_mun = man_mun.split('-')[0] if man_mun else "XXX"
-    val_sol_final = man_sol if man_sol else "0000000000"
-    val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else "NOME"
-    val_livre_final_desc = man_livre.upper() if man_livre else "NOME"
-    val_cc_final = man_cc if man_cc else "0000000000"
-    
-    raw_name = f"{pref_especial}{pref_tipo}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
-    clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
-    obra_relampago_formatada = clean_name[:40].upper()
-    
-    fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase.upper() in ["BI", "BT", "B"] else f"(FASE {fase})"
-    desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
-    
-    descricoes_list.append(desc_str)
-    # NOMES DAS OBRAS usa o nome completo, aplica VU quando marcado e só então limita a 40 caracteres.
-    nome_lista_manual = aplicar_marcacao_vu(clean_name.upper(), val_sol_final)
-    nomes_obras_list.append(limitar_nome_obra(nome_lista_manual))
+    if features_outros:
+        folium.GeoJson(
+            {"type": "FeatureCollection", "features": features_outros},
+            name="Outros Equipamentos",
+            style_function=lambda x: {'color': x['properties']['COR'], 'fillColor': x['properties']['COR'], 'radius': 6, 'weight': 2, 'fillOpacity': 1.0},
+            marker=folium.CircleMarker(radius=6, fill=True, fillOpacity=1.0),
+            tooltip=folium.features.GeoJsonTooltip(fields=['TIPO_REDE', 'NOME'], aliases=['Rede:', 'Identificação:']),
+            popup=folium.features.GeoJsonPopup(fields=['TIPO_REDE', 'NOME', 'ALIMENTADOR', 'LOC', 'GPS'], aliases=['Rede:', 'Identificação:', 'Alimentador:', 'Localização:', 'Coordenadas:'])
+        ).add_to(mapa)
+
+    fg_busca = folium.FeatureGroup(name="Resultado da Pesquisa", show=True)
+    for _, row in df_busca.iterrows():
+        coord_txt = f"{row['COORDS'][0]:.5f}, {row['COORDS'][1]:.5f}" if row['TIPO_GEOMETRIA'] == 'Ponto' else "Linha de Múltiplos Pontos"
+        sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={row['COORDS'][0]},{row['COORDS'][1]}"
+        html_popup = f"""
+        <div style="min-width: 250px; font-family: sans-serif;">
+            <h4 style="margin-top: 0; color: #FF00FF; border-bottom: 2px solid #FF00FF; padding-bottom: 5px;">{html.escape(str(row['TIPO_REDE']))}</h4>
+            <table style="width:100%;">
+                <tr><td style="color: #555; padding: 2px;"><b>IDENTIFICAÇÃO:</b></td><td>{html.escape(str(row['NOME']))}</td></tr>
+                <tr><td style="color: #555; padding: 2px;"><b>LOCAL:</b></td><td>{html.escape(str(row['MUNICIPIO']))}</td></tr>
+                <tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr>
+            </table>
+        </div>
+        """
+        popup = folium.Popup(html_popup, max_width=350)
+        if row['TIPO_GEOMETRIA'] == 'Linha':
+            folium.PolyLine(locations=row['COORDS'], color='#FF00FF', weight=8, opacity=1.0, popup=popup, tooltip=f"ALVO ENCONTRADO: {html.escape(str(row['NOME']))}").add_to(fg_busca)
+            for pt in row['COORDS']: busca_lats.append(pt[0]); busca_lons.append(pt[1])
+        else:
+            folium.Marker(location=row['COORDS'], icon=folium.Icon(color='purple', icon='star'), popup=popup, tooltip=f"ALVO ENCONTRADO: {html.escape(str(row['NOME']))}").add_to(fg_busca)
+            busca_lats.append(row['COORDS'][0]); busca_lons.append(row['COORDS'][1])
+    if busca_lat is not None and busca_lon is not None: folium.Marker(location=[busca_lat, busca_lon], icon=folium.Icon(color='orange', icon='map-pin', prefix='fa'), tooltip="Sua Pesquisa GPS").add_to(fg_busca)
+    fg_busca.add_to(mapa)
+
 else:
-    for idx, sol in enumerate(solicitacoes):
-        res_sol_notas = df_notas[df_notas['PROTOCOLO'] == sol] if not df_notas.empty else pd.DataFrame()
-        
-        if not res_sol_notas.empty:
-            r_sol_notas = res_sol_notas.iloc[0]
-            
-            cc_sol = str(r_sol_notas.get('CONTA CONTRATO', '')).replace('.0', '')
-            if cc_sol.lower() == 'nan': cc_sol = ""
-            
-            cli_sol = str(r_sol_notas.get('NOME DO SOLICITANTE', r_sol_notas.get('NOME', ''))).upper()
-            if cli_sol.lower() == 'NAN': cli_sol = ""
-            
-            cid_sol = str(r_sol_notas.get('MUNICIPIO', ''))
-            if cid_sol.lower() == 'nan': cid_sol = ""
-            
-            fase_sol = str(r_sol_notas.get('FASE', '')).upper()
-            if fase_sol in ['NAN', 'NÃO ESPECIFICADO', 'NAO ESPECIFICADO', '']: fase_sol = "MO"
-            
-            tipo_obra_raw_loop = str(r_sol_notas.get('TIPO NOTA', ''))
-            if tipo_obra_raw_loop.lower() == 'nan': tipo_obra_raw_loop = ""
-            
-            parts_to = tipo_obra_raw_loop.replace("-", " ").strip().split(" ")
-            tipo_obra_sisco_loop = " ".join(parts_to[:3]) if len(parts_to) > 3 else tipo_obra_raw_loop
+    tree_grid = None
 
-            cid_sol_limpo = remover_acentos(cid_sol)
-            pref_mun = man_mun.split('-')[0] if man_mun else map_mun.get(cid_sol_limpo, cid_sol_limpo[:3] if cid_sol_limpo else "XXX")
-            pref_tipo_loop = man_tipo_obra.split('-')[0] if man_tipo_obra else map_tipo_obra.get(remover_acentos(tipo_obra_sisco_loop), "CT")
-            
-            val_sol_final = man_sol if man_sol else sol
-            
-            val_livre_final_nome = man_livre.replace(" ", "-")[:15] if man_livre else cli_sol.replace(" ", "-")[:15]
-            val_livre_final_desc = man_livre.upper() if man_livre else cli_sol
-            
-            val_cc_final = man_cc if man_cc else cc_sol
-            
-            fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase_sol.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase_sol.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase_sol.upper() in ["BI", "BT", "B"] else f"(FASE {fase_sol})"
-            desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
-            
-            raw_name = f"{pref_especial}{pref_tipo_loop}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
-            clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
-            nome_str = clean_name[:40].upper()
-            
-            if idx == 0:
-                obra_relampago_formatada = nome_str
-        else:
-            desc_str = f"{sol} - NÃO ENCONTRADO"
-            nome_str = f"{sol} - NÃO ENCONTRADO"
-            if idx == 0:
-                obra_relampago_formatada = nome_str
-            
-        descricoes_list.append(desc_str)
+def calcular_rede_proxima(lat, lon):
+    if not tree_grid: return "<span style='color:gray'>Ative um alimentador no filtro para calcular</span>"
+    xyz = latlon_to_xyz(lat, lon)
+    _, idx = tree_grid.query(xyz)
+    tipo, nome, g_lat, g_lon = grid_info[idx]
+    dist_m = haversine(lat, lon, g_lat, g_lon) * 1000
+    return f"<b>{html.escape(str(tipo))}</b> {html.escape(str(nome))} ({dist_m:.1f}m)"
+
+# ==========================================
+# RENDERIZAÇÃO DAS ÁREAS ESPECIAIS (COM POPUPS)
+# ==========================================
+def adicionar_camada_area(geo_data, nome_camada, mapa_obj, cor, is_ponto=False):
+    if geo_data:
+        estilo = lambda x: {'fillColor': cor, 'color': cor, 'weight': 2, 'fillOpacity': 0.4}
+        marcador = folium.CircleMarker(radius=6, fill=True, fillOpacity=1, color=cor) if is_ponto else None
         
-        if notas_associadas and idx > 0:
-            pass 
-        else:
-            # O quadro NOMES DAS OBRAS pode ter até 40 caracteres, contando letras,
-            # números, hífens, VU e qualquer outro caractere.
-            if not res_sol_notas.empty:
-                nome_base_lista = clean_name.upper()
+        folium.GeoJson(
+            geo_data, 
+            name=nome_camada, 
+            style_function=estilo if not is_ponto else None,
+            marker=marcador,
+            tooltip=folium.features.GeoJsonTooltip(fields=['NOME'], aliases=['Área Específica:']),
+            popup=folium.features.GeoJsonPopup(fields=['NOME'], aliases=['Nome do Local:'], style="font-family: sans-serif; font-size: 14px; min-width: 200px;")
+        ).add_to(mapa_obj)
+
+if mostrar_quilombos: adicionar_camada_area(geo_q, "Áreas Quilombolas", mapa, "#ff7f00")
+if mostrar_indigenas: adicionar_camada_area(geo_i, "Terras Indígenas", mapa, "#2ca02c")
+if mostrar_arqueologia: adicionar_camada_area(geo_a, "Sítios Arqueológicos", mapa, "#8c564b", is_ponto=True)
+if mostrar_uc_federal: adicionar_camada_area(geo_uc_fed, "UC Federal", mapa, "#e6b800")
+if mostrar_uc_estadual: adicionar_camada_area(geo_uc_est, "UC Estadual", mapa, "#ffff00")
+if mostrar_uc_municipal: adicionar_camada_area(geo_uc_mun, "UC Municipal", mapa, "#ffff00")
+
+
+# ==========================================
+# CAMADAS DE OBRAS E CRUZAMENTOS COM ÁREAS
+# ==========================================
+dados_tabela_conflito = []
+
+if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel)) and msg_obras == "OK":
+    
+    if mostrar_todas_obras or bool(status_list_sel):
+        nome_cluster_obras = "Todas as Obras (Geral)" if mostrar_todas_obras else "Obras por STATUS LIST"
+        cluster_todas = MarkerCluster(name=nome_cluster_obras)
+        if mostrar_todas_obras and df_concluidas is not None:
+            for _, row in df_concluidas.iterrows():
+                lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
+                sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
+                areas_especiais = verificar_areas_da_obra(lat, lon) 
+                rede_prox = calcular_rede_proxima(lat, lon)
+                
+                html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: #1f77b4; border-bottom: 2px solid #1f77b4; padding-bottom: 5px;">✅ OBRA CONCLUÍDA</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(str(row.get('PROTOCOLO', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME:</b></td><td>{html.escape(str(row.get('NOME', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
+                
+                folium.CircleMarker(location=[lat, lon], radius=5, color='black', weight=1, fill=True, fillColor='#1f77b4', fillOpacity=0.9, tooltip=f"Concluída: {html.escape(str(row.get('PROTOCOLO', 'S/N')))}", popup=folium.Popup(html_popup, max_width=350)).add_to(cluster_todas)
+        
+        if df_andamento is not None:
+            # Nesta camada genérica, a aparência é definida SOMENTE pelo STATUS LIST.
+            # A sinalização vermelha de conflito pertence exclusivamente à opção
+            # 'OBRAS CONFLITANTES (Raio 50m)' abaixo. Assim, marcar um STATUS LIST
+            # não ativa visualmente conflitos por conta própria.
+            cores_status_list = {
+                '0': '#cbd5e1',
+                'EM LEVANTAMENTO': '#22c55e',
+                'ANALISE DE LEVANTAMENTO': '#eab308',
+                'IMPRODUTIVO': '#f97316',
+                'CORRECAO DE LEVANTAMENTO': '#7c3aed',
+            }
+            for _, row in df_andamento.iterrows():
+                lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
+                status_list_atual = str(row.get('STATUS_LIST_NORM', '')).strip() or 'SEM STATUS'
+                status_norm_cor = remove_accents(status_list_atual).upper().strip()
+                cor = cores_status_list.get(status_norm_cor, '#2ca02c')
+                titulo = f"🚧 {status_list_atual}"
+                sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
+                areas_especiais = verificar_areas_da_obra(lat, lon) 
+                rede_prox = calcular_rede_proxima(lat, lon)
+                
+                html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: {cor}; border-bottom: 2px solid {cor}; padding-bottom: 5px;">{titulo}</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(str(row.get('PROTOCOLO', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME:</b></td><td>{html.escape(str(row.get('NOME', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
+                
+                folium.CircleMarker(location=[lat, lon], radius=5, color='black', weight=1, fill=True, fillColor=cor, fillOpacity=0.9, tooltip=f"{titulo}: {html.escape(str(row.get('PROTOCOLO', 'S/N')))}", popup=folium.Popup(html_popup, max_width=350)).add_to(cluster_todas)
+        cluster_todas.add_to(mapa)
+
+    if mostrar_concluidas and df_concluidas is not None:
+        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas", show=True)
+        for _, row in df_concluidas.iterrows():
+            protocolo = str(row.get('PROTOCOLO', 'S/N'))
+            lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
+            cor_concluida = '#1f77b4'
+            sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
+            areas_especiais = verificar_areas_da_obra(lat, lon)
+            rede_prox = calcular_rede_proxima(lat, lon)
+            
+            html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: {cor_concluida}; border-bottom: 2px solid {cor_concluida}; padding-bottom: 5px;">✅ OBRA CONCLUÍDA</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(protocolo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME:</b></td><td>{html.escape(str(row.get('NOME', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
+            
+            folium.CircleMarker(
+                location=[lat, lon], radius=6, color='black', weight=1, fill=True, 
+                fillColor=cor_concluida, fillOpacity=1, popup=folium.Popup(html_popup, max_width=350),
+                tooltip=f"Obra Concluída: {html.escape(protocolo)}"
+            ).add_to(fg_concluidas)
+            
+        fg_concluidas.add_to(mapa)
+            
+    if mostrar_conflitantes and df_andamento is not None:
+        fg_andamento = folium.FeatureGroup(name="Obras Conflitantes", show=True)
+        for _, row in df_andamento.iterrows():
+            if not row['CONFLITO']: continue
+            lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
+            protocolo = str(row.get('PROTOCOLO', 'S/N'))
+            nome_nova = str(row.get('NOME', 'S/N'))
+            nome_alvo = str(row.get('NOME_CONCLUIDA', 'S/N'))
+            sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
+            areas_especiais = verificar_areas_da_obra(lat, lon)
+            rede_prox = calcular_rede_proxima(lat, lon)
+            
+            dist_conflito = float(row['DISTANCIA_CONFLITO'])
+            if dist_conflito <= 0.5:
+                severidade = '📌 MESMO PONTO'
+            elif dist_conflito <= 10:
+                severidade = '🔴 CRÍTICO'
+            elif dist_conflito <= 25:
+                severidade = '🟠 ALTO'
             else:
-                nome_base_lista = nome_str
-            nome_para_lista = aplicar_marcacao_vu(nome_base_lista, sol)
-            nomes_obras_list.append(limitar_nome_obra(nome_para_lista))
+                severidade = '🟡 MÉDIO'
+
+            dados_tabela_conflito.append({
+                "Severidade": severidade,
+                "Protocolo (Nova)": protocolo,
+                "Nome (Nova)": nome_nova,
+                "STATUS LIST (Nova)": str(row.get('STATUS_LIST_NORM', '')).strip(),
+                "Município": str(row.get('MUNICIPIO_NORM', '')).strip(),
+                "Regional": str(row.get('REGIONAL_NORM', '')).strip(),
+                "Tipo Nota": str(row.get('TIPO NOTA', '')).strip(),
+                "Conflito (Concluída)": row['PROTOCOLO_CONFLITO'],
+                "Nome (Concluída)": nome_alvo,
+                "STATUS LIST (Concluída)": 'CONCLUÍDO',
+                "Concluídas no raio": int(row.get('QTD_CONCLUIDAS_50M', 0) or 0),
+                "Protocolos concluídos no raio": str(row.get('PROTOCOLOS_CONCLUIDOS_50M', '')).strip(),
+                "Distância (m)": round(dist_conflito, 2),
+                "Latitude": lat,
+                "Longitude": lon,
+                "Google Maps": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+            })
+                
+            html_popup = f"""
+            <div style="min-width:300px;font-family:sans-serif;line-height:1.45;">
+              <h4 style="margin:0 0 8px 0;color:#dc2626;border-bottom:2px solid #dc2626;padding-bottom:5px;">🚨 CONFLITO DETECTADO</h4>
+              <div style="font-weight:700;color:#334155;margin-top:4px;">🏗️ OBRA NOVA</div>
+              <b>Protocolo:</b> {html.escape(protocolo)}<br>
+              <b>Nome:</b> {html.escape(nome_nova)}<br>
+              <b>Status:</b> {html.escape(str(row.get('STATUS_LIST_NORM','')))}<br>
+              <b>Município / Regional:</b> {html.escape(str(row.get('MUNICIPIO_NORM','')))} / {html.escape(str(row.get('REGIONAL_NORM','')))}<br>
+              <div style="font-weight:700;color:#dc2626;margin-top:8px;">🔵 CONCLUÍDA DE REFERÊNCIA</div>
+              <b>Protocolo:</b> {html.escape(str(row['PROTOCOLO_CONFLITO']))}<br>
+              <b>Nome:</b> {html.escape(nome_alvo)}<br>
+              <b>Distância:</b> {dist_conflito:.2f} m — {html.escape(severidade)}<br>
+              <b>Concluídas no raio:</b> {int(row.get('QTD_CONCLUIDAS_50M', 0) or 0)}<br>
+              <div style="font-weight:700;color:#334155;margin-top:8px;">🧭 CONTEXTO</div>
+              <b>Rede elétrica:</b> {rede_prox}<br>
+              <b>Restrições:</b> {areas_especiais}<br>
+              <div style="padding-top:9px;"><a href="{sv_url}" target="_blank" style="color:#0066cc;font-weight:bold;text-decoration:none;">👁️ Abrir Street View</a></div>
+            </div>
+            """
+
+            # O raio de 50 m pertence à OBRA CONCLUÍDA (azul), pois é ela
+            # que define a área onde uma nova solicitação gera conflito.
+            lat_conc = row.get('LAT_CONCLUIDA_CONFLITO')
+            lon_conc = row.get('LON_CONCLUIDA_CONFLITO')
+            if pd.notna(lat_conc) and pd.notna(lon_conc):
+                lat_conc, lon_conc = float(lat_conc), float(lon_conc)
+                protocolo_conc = str(row.get('PROTOCOLO_CONFLITO', 'S/N'))
+
+                # Círculo não interativo: não bloqueia o clique no marcador azul.
+                folium.Circle(
+                    location=[lat_conc, lon_conc],
+                    radius=RAIO_CONFLITO_M,
+                    color='#ff0000',
+                    weight=4,
+                    opacity=1.0,
+                    fill=True,
+                    fill_color='#ff0000',
+                    fill_opacity=0.10,
+                    interactive=False
+                ).add_to(fg_andamento)
+
+                popup_concluida = f"""
+                <div style='min-width:250px;font-family:sans-serif;'>
+                    <h4 style='margin-top:0;color:#1f77b4;border-bottom:2px solid #1f77b4;padding-bottom:5px;'>✅ OBRA CONCLUÍDA</h4>
+                    <b>PROTOCOLO:</b> {html.escape(protocolo_conc)}<br>
+                    <b>NOME:</b> {html.escape(nome_alvo)}<br>
+                    <b>STATUS LIST:</b> CONCLUÍDO<br>
+                    <b>COORDENADAS:</b> {lat_conc:.6f}, {lon_conc:.6f}<br>
+                    <b>RAIO DE CONFLITO:</b> 50 m
+                </div>
+                """
+                folium.CircleMarker(
+                    location=[lat_conc, lon_conc], radius=7, color='black', weight=1,
+                    fill=True, fill_color='#1f77b4', fill_opacity=1.0,
+                    tooltip=f"Concluída: {html.escape(protocolo_conc)}",
+                    popup=folium.Popup(popup_concluida, max_width=320)
+                ).add_to(fg_andamento)
+
+            # A solicitação em conflito permanece vermelha e clicável.
+            folium.CircleMarker(
+                location=[lat, lon], radius=6, color='black', weight=1,
+                fill=True, fill_color='red', fill_opacity=0.9,
+                tooltip=f"Conflito: {html.escape(protocolo)}",
+                popup=folium.Popup(html_popup, max_width=350)
+            ).add_to(fg_andamento)
+        fg_andamento.add_to(mapa)
 
 # ==========================================
-# 6. RENDERIZAÇÃO DAS COLUNAS 3 E 4
+# FOCO AUTOMÁTICO RECEBIDO DO CRIAR SGO
 # ==========================================
-with c3:
-    lbl_obra_estilo = 'class="lbl"' if not (man_tipo_obra or man_pi or man_livre or man_especial) else 'class="lbl text-red" style="background-color: #fef08a;"'
-    val_obra_estilo = 'class="val text-green"' if not (man_tipo_obra or man_pi or man_livre or man_especial) else 'class="val text-red" style="background-color: #fef08a; font-style: italic;"'
-    lbl_obra_texto = "⚡ Obra Relampago ⚡" if not (man_tipo_obra or man_pi or man_livre or man_especial) else "🚧 Nome da Obra 🚧"
-    
-    st.markdown(f"""
-    <div class="eh">📝 CRIAÇÃO DA NOTA SGO 📝</div>
-    <table class="et">
-        <tr><td class="lbl">Tipo Nota | Parceiro</td><td class="val text-red" style="font-size: 11px;">{tipo_nota_parceiro}</td></tr>
-        <tr><td {lbl_obra_estilo} style="font-size: 11px;">{lbl_obra_texto}</td><td {val_obra_estilo}>{obra_relampago_formatada}</td></tr>
-        <tr><td class="lbl">{regional_label}</td><td class="val">{regional_formatado}</td></tr>
-        <tr><td class="lbl">Cidade</td><td class="val">{cidade_auto}</td></tr>
-        <tr><td class="lbl">Área Responsável</td><td class="val">{area_resp}</td></tr>
-        <tr><td class="lbl">Cliente</td><td class="val">{cliente_auto}</td></tr>
-        <tr><td class="lbl">Endereço</td><td class="val">{endereco_auto}</td></tr>
-        <tr><td class="lbl">PI</td><td class="val text-blue" style="font-style: italic;">{pi_ativo}</td></tr>
-        <tr><td class="lbl">Gerente</td><td class="val">{gerente}</td></tr>
-        <tr><td class="lbl">Executivo</td><td class="val">{executivo}</td></tr>
-        <tr><td class="lbl">Responsável Obra</td><td class="val text-blue" style="font-size: 11px;">{responsavel_obra}</td></tr>
-        <tr><td class="lbl">Valor Previsto</td><td class="val text-green">{valor_previsto}</td></tr>
-    </table>
-    
-    <div class="eh">👍 APROVAÇÃO DA NOTA SGO</div>
-    <table class="et">
-        <tr><td class="lbl">Empresa</td><td class="val">{empresa}</td></tr>
-        <tr><td class="lbl">Contrato</td><td class="val">{contrato}</td></tr>
-        <tr><td class="lbl">Técnico</td><td class="val">{tecnico}</td></tr>
-        <tr><td class="lbl">Data</td><td class="val">{data_aprov}</td></tr>
-    </table>
-    
-    <div class="eh-dark" style="text-align: left; padding-left: 10px;">INFORMAÇÕES</div>
-    <div class="obs-box" style="margin-bottom: 15px;">{obs}</div>
+coords_foco_sgo = []
+if foco_mapa_sgo and foco_mapa_sgo.get('conflitos'):
+    fg_foco = folium.FeatureGroup(name="🚨 Conflito vindo do CRIAR SGO", show=True)
+    conflitos_foco = foco_mapa_sgo.get('conflitos', [])
 
-    <div class="eh-dark" style="text-align: left; padding-left: 10px;">INFORMAÇÕES EXTRAS</div>
-    <div class="obs-box">{obs_extra}</div>
-    """, unsafe_allow_html=True)
+    # Evita repetir a mesma solicitação quando ela possui mais de uma concluída próxima.
+    novas_desenhadas = set()
+    concluidas_desenhadas = set()
 
-with c4:
-    st.markdown('<div class="eh">🖋 DESCRIÇÕES SGO 🖋</div>', unsafe_allow_html=True)
-    descricoes_html_final = "<br>".join(descricoes_list) if descricoes_list else ""
-    st.markdown(f'<div class="list-box">{descricoes_html_final}</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="eh" style="margin-top: 15px;">🚧 NOMES DAS OBRAS 🚧</div>', unsafe_allow_html=True)
+    for item in conflitos_foco:
+        obra_nova = str(item.get('obra_nova', ''))
+        lat_nova = float(item.get('lat_nova'))
+        lon_nova = float(item.get('lon_nova'))
+        obra_conc = str(item.get('obra_concluida', ''))
+        lat_conc = float(item.get('lat_concluida'))
+        lon_conc = float(item.get('lon_concluida'))
+        dist_m = float(item.get('distancia_m', 0.0))
+        nome_nova = html.escape(str(item.get('nome_nova', '')))
+        nome_conc = html.escape(str(item.get('nome_concluida', '')))
+        mun_nova = html.escape(str(item.get('municipio_nova', '')))
+        mun_conc = html.escape(str(item.get('municipio_concluida', '')))
+        status_conc = html.escape(str(item.get('status_list_concluida', 'CONCLUIDO')))
 
-    # Os nomes ficam sozinhos no quadro para permitir copiar/colar sem levar
-    # o contador junto. O contador é exibido em uma área separada e não selecionável.
-    nomes_html_final = "<br>".join(str(nome) for nome in nomes_obras_list) if nomes_obras_list else ""
-    st.markdown(f'<div class="list-box">{nomes_html_final}</div>', unsafe_allow_html=True)
+        chave_nova = (obra_nova, round(lat_nova, 7), round(lon_nova, 7))
+        if chave_nova not in novas_desenhadas:
+            novas_desenhadas.add(chave_nova)
+            coords_foco_sgo.append([lat_nova, lon_nova])
+            popup_nova = f"""
+            <div style='min-width:260px;font-family:sans-serif;'>
+                <h4 style='margin:0 0 8px;color:#f97316;'>🟠 SOLICITAÇÃO CONSULTADA</h4>
+                <b>Obra:</b> {html.escape(obra_nova)}<br>
+                <b>Nome:</b> {nome_nova or '-'}<br>
+                <b>Município:</b> {mun_nova or '-'}<br>
+                <b>Coordenadas:</b> {lat_nova:.6f}, {lon_nova:.6f}
+            </div>
+            """
+            folium.Marker(
+                [lat_nova, lon_nova],
+                icon=folium.Icon(color='orange', icon='map-pin', prefix='fa'),
+                tooltip=f"Solicitação {obra_nova}",
+                popup=folium.Popup(popup_nova, max_width=320)
+            ).add_to(fg_foco)
+        chave_conc = (obra_conc, round(lat_conc, 7), round(lon_conc, 7))
+        if chave_conc not in concluidas_desenhadas:
+            concluidas_desenhadas.add(chave_conc)
+            coords_foco_sgo.append([lat_conc, lon_conc])
+            popup_conc = f"""
+            <div style='min-width:260px;font-family:sans-serif;'>
+                <h4 style='margin:0 0 8px;color:#2563eb;'>🔵 OBRA CONCLUÍDA PRÓXIMA</h4>
+                <b>Obra:</b> {html.escape(obra_conc)}<br>
+                <b>Status LIST:</b> {status_conc}<br>
+                <b>Nome:</b> {nome_conc or '-'}<br>
+                <b>Município:</b> {mun_conc or '-'}<br>
+                <b>Coordenadas:</b> {lat_conc:.6f}, {lon_conc:.6f}<br>
+                <b>Raio de conflito:</b> 50 m
+            </div>
+            """
 
-    if nomes_obras_list:
-        contagens_html = " &nbsp;•&nbsp; ".join(
-            f'{idx + 1}: {len(str(nome))}/40'
-            for idx, nome in enumerate(nomes_obras_list)
-        )
+            # O círculo é centrado na obra concluída e não captura cliques.
+            folium.Circle(
+                location=[lat_conc, lon_conc],
+                radius=RAIO_CONFLITO_M,
+                color='#ff0000',
+                weight=4,
+                opacity=1.0,
+                fill=True,
+                fill_color='#ff0000',
+                fill_opacity=0.10,
+                interactive=False
+            ).add_to(fg_foco)
+
+            # Marcador azul adicionado depois do círculo para permanecer acima e clicável.
+            folium.Marker(
+                [lat_conc, lon_conc],
+                icon=folium.Icon(color='blue', icon='check', prefix='fa'),
+                tooltip=f"Concluída {obra_conc}",
+                popup=folium.Popup(popup_conc, max_width=320),
+                z_index_offset=1000
+            ).add_to(fg_foco)
+
+        folium.PolyLine(
+            [[lat_nova, lon_nova], [lat_conc, lon_conc]],
+            color='#dc2626', weight=3, opacity=0.9, dash_array='6,5',
+            tooltip=f"{obra_nova} ↔ {obra_conc}: {dist_m:.1f} m"
+        ).add_to(fg_foco)
+
+        # Distância no meio da ligação.
+        lat_meio = (lat_nova + lat_conc) / 2.0
+        lon_meio = (lon_nova + lon_conc) / 2.0
+        folium.Marker(
+            [lat_meio, lon_meio],
+            icon=folium.DivIcon(html=f"<div style='background:white;border:1px solid #dc2626;border-radius:5px;padding:2px 5px;color:#991b1b;font-weight:bold;font-size:11px;white-space:nowrap;'>{dist_m:.1f} m</div>")
+        ).add_to(fg_foco)
+
+    fg_foco.add_to(mapa)
+
+folium.LayerControl(position='topright').add_to(mapa)
+
+# Helper global para cards KPI.
+# Deve ficar fora dos blocos condicionais para ser reutilizado em Conflitos e Qualidade.
+def render_kpi_card(col, css_class, title, value, subtitle):
+    with col:
         st.markdown(
-            f'<div class="contador-externo">CARACTERES — {contagens_html}</div>',
+            f"<div class='nip-kpi-card {css_class}'><div class='nip-kpi-title'>{title}</div><div class='nip-kpi-value'>{value}</div><div class='nip-kpi-sub'>{subtitle}</div></div>",
             unsafe_allow_html=True
         )
+
+# -------------------------------------------------------------
+# 5. TABELA INTELIGENTE E BOTÃO DE EXPORTAÇÃO
+# -------------------------------------------------------------
+zoom_lat, zoom_lon = None, None
+
+with table_container:
+    if mostrar_conflitantes and msg_obras == "OK" and len(dados_tabela_conflito) > 0:
+        st.markdown("---")
+        st.markdown("### 🚨 Conflitos Geográficos — Obras em até 50 m de Concluídas")
+        st.caption("Priorize os conflitos mais próximos. Selecione uma linha da tabela para centralizar a obra correspondente no mapa.")
+
+        df_tabela = pd.DataFrame(dados_tabela_conflito)
+        df_tabela['Distância (m)'] = pd.to_numeric(df_tabela['Distância (m)'], errors='coerce').fillna(0.0)
+        df_tabela = df_tabela.sort_values(['Distância (m)', 'Protocolo (Nova)'], ascending=[True, True]).reset_index(drop=True)
+
+        total_conflitos = int(len(df_tabela))
+        qtd_criticos = int((df_tabela['Severidade'] == '🔴 CRÍTICO').sum())
+        qtd_concluidas_distintas = int(df_tabela['Conflito (Concluída)'].astype(str).nunique())
+        menor_dist = float(df_tabela['Distância (m)'].min()) if total_conflitos else 0.0
+
+        st.markdown("""
+        <style>
+        .nip-kpi-card {
+            border-radius: 18px;
+            padding: 18px 18px 16px 18px;
+            color: #ffffff;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.14);
+            border: 1px solid rgba(255,255,255,0.12);
+            min-height: 118px;
+            margin-bottom: 8px;
+        }
+        .nip-kpi-title {
+            font-size: 0.88rem;
+            font-weight: 700;
+            opacity: 0.95;
+            margin-bottom: 10px;
+            letter-spacing: 0.2px;
+        }
+        .nip-kpi-value {
+            font-size: 2.15rem;
+            font-weight: 800;
+            line-height: 1.0;
+            margin-bottom: 8px;
+        }
+        .nip-kpi-sub {
+            font-size: 0.82rem;
+            opacity: 0.92;
+            line-height: 1.25;
+        }
+        .nip-kpi-red {background: linear-gradient(135deg, #ff4d4f 0%, #c81e1e 100%);}
+        .nip-kpi-orange {background: linear-gradient(135deg, #ff9f43 0%, #ff6b00 100%);}
+        .nip-kpi-blue {background: linear-gradient(135deg, #4096ff 0%, #1d4ed8 100%);}
+        .nip-kpi-purple {background: linear-gradient(135deg, #8b5cf6 0%, #5b21b6 100%);}
+        .nip-kpi-amber {background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);}
+        .nip-kpi-green {background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);}
+        .nip-kpi-cyan {background: linear-gradient(135deg, #06b6d4 0%, #0f766e 100%);}
+        .nip-chip-wrap {display:flex; flex-wrap:wrap; gap:10px; margin: 8px 0 14px 0;}
+        .nip-chip {
+            display:inline-flex; align-items:center; gap:8px;
+            padding:10px 14px; border-radius:999px; font-size:0.88rem; font-weight:700;
+            color:#132238; background:#eef2ff; border:1px solid #d9e2ff;
+        }
+        .nip-chip strong {font-size:0.95rem;}
+        </style>
+        """, unsafe_allow_html=True)
+
+        k1, k2, k3, k4 = st.columns(4)
+        render_kpi_card(k1, 'nip-kpi-red', '🚨 Conflitos encontrados', f"{total_conflitos:,}".replace(',', '.'), 'Obras novas dentro de 50 m de uma concluída.')
+        render_kpi_card(k2, 'nip-kpi-orange', '⚠️ Críticos (≤ 10 m)', f"{qtd_criticos:,}".replace(',', '.'), 'Casos mais urgentes para verificação imediata.')
+        render_kpi_card(k3, 'nip-kpi-blue', '🔵 Concluídas envolvidas', f"{qtd_concluidas_distintas:,}".replace(',', '.'), 'Quantidade de obras concluídas impactando novos registros.')
+        render_kpi_card(k4, 'nip-kpi-purple', '📏 Menor distância', f"{menor_dist:.2f} m", 'Menor separação geográfica encontrada entre as obras.')
+
+        f1, f2, f3 = st.columns([1, 1, 1])
+        with f1:
+            op_reg = sorted([x for x in df_tabela['Regional'].dropna().astype(str).unique() if x and x != 'DESCONHECIDO'])
+            filtro_reg_confl = st.multiselect("Regional", op_reg, key="filtro_reg_conflitos")
+        with f2:
+            base_mun = df_tabela[df_tabela['Regional'].isin(filtro_reg_confl)] if filtro_reg_confl else df_tabela
+            op_mun = sorted([x for x in base_mun['Município'].dropna().astype(str).unique() if x and x != 'DESCONHECIDO'])
+            filtro_mun_confl = st.multiselect("Município", op_mun, key="filtro_mun_conflitos")
+        with f3:
+            filtro_sev = st.multiselect(
+                "Severidade",
+                ['📌 MESMO PONTO', '🔴 CRÍTICO', '🟠 ALTO', '🟡 MÉDIO'],
+                key="filtro_sev_conflitos"
+            )
+
+        df_conf_view = df_tabela.copy()
+        if filtro_reg_confl:
+            df_conf_view = df_conf_view[df_conf_view['Regional'].isin(filtro_reg_confl)]
+        if filtro_mun_confl:
+            df_conf_view = df_conf_view[df_conf_view['Município'].isin(filtro_mun_confl)]
+        if filtro_sev:
+            df_conf_view = df_conf_view[df_conf_view['Severidade'].isin(filtro_sev)]
+
+        st.caption(f"Exibindo {len(df_conf_view)} de {total_conflitos} conflito(s).")
+
+        cols_conf = [
+            'Severidade', 'Protocolo (Nova)', 'Nome (Nova)', 'STATUS LIST (Nova)',
+            'Município', 'Regional', 'Tipo Nota', 'Conflito (Concluída)',
+            'Nome (Concluída)', 'STATUS LIST (Concluída)', 'Concluídas no raio',
+            'Protocolos concluídos no raio', 'Distância (m)', 'Latitude', 'Longitude', 'Google Maps'
+        ]
+        df_conf_view = df_conf_view[[c for c in cols_conf if c in df_conf_view.columns]].copy()
+
+        try:
+            event = st.dataframe(
+                df_conf_view,
+                use_container_width=True,
+                height=min(520, 80 + max(1, len(df_conf_view)) * 35),
+                on_select="rerun",
+                selection_mode="single_row",
+                hide_index=True,
+                column_config={
+                    "Distância (m)": st.column_config.NumberColumn("Distância (m)", format="%.2f m"),
+                    "Latitude": st.column_config.NumberColumn("Latitude", format="%.6f"),
+                    "Longitude": st.column_config.NumberColumn("Longitude", format="%.6f"),
+                    "Google Maps": st.column_config.LinkColumn("📍 Google Maps", display_text="Abrir Maps"),
+                }
+            )
+            if hasattr(event, 'selection') and event.selection.rows:
+                idx = event.selection.rows[0]
+                zoom_lat = float(df_conf_view.iloc[idx]['Latitude'])
+                zoom_lon = float(df_conf_view.iloc[idx]['Longitude'])
+        except Exception:
+            st.dataframe(df_conf_view, use_container_width=True, hide_index=True)
+
+        cdl1, cdl2 = st.columns([1, 1])
+        with cdl1:
+            csv = df_conf_view.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Baixar conflitos filtrados (CSV)",
+                data=csv,
+                file_name="conflitos_geograficos_filtrados.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with cdl2:
+            try:
+                buffer_xlsx = io.BytesIO()
+                with pd.ExcelWriter(buffer_xlsx, engine='openpyxl') as writer:
+                    df_conf_view.to_excel(writer, sheet_name='Conflitos', index=False)
+                    resumo_conf = pd.DataFrame({
+                        'Indicador': ['Conflitos', 'Críticos até 10 m', 'Concluídas distintas', 'Menor distância (m)'],
+                        'Valor': [total_conflitos, qtd_criticos, qtd_concluidas_distintas, round(menor_dist, 2)]
+                    })
+                    resumo_conf.to_excel(writer, sheet_name='Resumo', index=False)
+                st.download_button(
+                    label="📊 Baixar conflitos (Excel)",
+                    data=buffer_xlsx.getvalue(),
+                    file_name="conflitos_geograficos.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            except Exception as exc:
+                st.caption(f"Excel indisponível: {exc}")
+
+        with st.expander("🔗 Consolidado por obra concluída", expanded=False):
+            consolidado = (
+                df_tabela.groupby(['Conflito (Concluída)', 'Nome (Concluída)'], dropna=False)
+                .agg(
+                    NOVAS_EM_CONFLITO=('Protocolo (Nova)', 'nunique'),
+                    MENOR_DISTANCIA_M=('Distância (m)', 'min'),
+                    MAIOR_DISTANCIA_M=('Distância (m)', 'max'),
+                    MUNICIPIOS=('Município', lambda x: ' | '.join(sorted(set(str(v) for v in x if str(v).strip()))))
+                )
+                .reset_index()
+                .sort_values(['NOVAS_EM_CONFLITO','MENOR_DISTANCIA_M'], ascending=[False, True])
+            )
+            st.caption("Mostra quais obras concluídas concentram mais novas solicitações dentro do raio operacional.")
+            st.dataframe(consolidado, use_container_width=True, hide_index=True)
+            st.download_button(
+                "📥 Baixar consolidado por concluída (Excel)",
+                data=dataframe_para_excel_bytes(consolidado, 'Consolidado'),
+                file_name="conflitos_por_obra_concluida.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="download_consolidado_concluida"
+            )
+
+    if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel)) and msg_obras == "OK":
+        if df_invalidas is not None and not df_invalidas.empty:
+            st.markdown("---")
+
+            total_base = int(df_invalidas['_TOTAL_LINHAS_BASE'].iloc[0]) if '_TOTAL_LINHAS_BASE' in df_invalidas.columns else len(df_invalidas)
+            total_validas = int(df_invalidas['_TOTAL_VALIDAS_COORD'].iloc[0]) if '_TOTAL_VALIDAS_COORD' in df_invalidas.columns else max(0, total_base - len(df_invalidas))
+            perc_validas = (total_validas / total_base * 100.0) if total_base else 0.0
+
+            with st.expander(f"⚠️ Monitor de Qualidade de Dados — {len(df_invalidas):,} inconsistência(s)".replace(',', '.'), expanded=False):
+                st.markdown("#### Qualidade das coordenadas da base")
+                st.caption("Registros desta seção foram ignorados no mapa porque a coordenada não permite posicionamento geográfico confiável.")
+
+                q1, q2, q3 = st.columns(3)
+                render_kpi_card(q1, 'nip-kpi-amber', '⚠️ Inconsistências', f"{len(df_invalidas):,}".replace(',', '.'), 'Registros ignorados no mapa por coordenada inválida ou não confiável.')
+                render_kpi_card(q2, 'nip-kpi-green', '✅ Coordenadas válidas', f"{total_validas:,}".replace(',', '.'), 'Linhas aptas para posicionamento geográfico no mapa.')
+                render_kpi_card(q3, 'nip-kpi-cyan', '🌎 Qualidade geográfica', f"{perc_validas:.1f}%", 'Percentual da base com latitude e longitude utilizáveis.')
+
+                resumo_motivos = (
+                    df_invalidas['MOTIVO DA INCONSISTÊNCIA']
+                    .fillna('NÃO IDENTIFICADO')
+                    .value_counts()
+                    .rename_axis('Motivo')
+                    .reset_index(name='Quantidade')
+                )
+
+                st.markdown("##### 📌 Resumo por motivo")
+                chips = []
+                for _, row in resumo_motivos.head(6).iterrows():
+                    motivo = str(row['Motivo'])
+                    qtd = int(row['Quantidade'])
+                    chips.append(f"<div class='nip-chip'>📍 <span>{motivo}</span> <strong>{qtd:,}</strong></div>".replace(',', '.'))
+                if chips:
+                    st.markdown(f"<div class='nip-chip-wrap'>{''.join(chips)}</div>", unsafe_allow_html=True)
+                st.dataframe(resumo_motivos, use_container_width=True, hide_index=True)
+
+                fq1, fq2, fq3 = st.columns(3)
+                with fq1:
+                    op_mot = resumo_motivos['Motivo'].tolist()
+                    filtro_motivo = st.multiselect("Motivo", op_mot, key="filtro_motivo_qd")
+                with fq2:
+                    mun_col_q = next((c for c in ['MUNICIPIO', 'MUNICÍPIO', 'MUNICIPIO_NORM'] if c in df_invalidas.columns), None)
+                    op_mun_q = sorted(df_invalidas[mun_col_q].dropna().astype(str).unique().tolist()) if mun_col_q else []
+                    filtro_mun_q = st.multiselect("Município", op_mun_q, key="filtro_mun_qd")
+                with fq3:
+                    status_col_q = next((c for c in df_invalidas.columns if 'STATUS SISCO' in str(c).upper()), None)
+                    op_status_q = sorted(df_invalidas[status_col_q].dropna().astype(str).unique().tolist()) if status_col_q else []
+                    filtro_status_q = st.multiselect("STATUS SISCO", op_status_q, key="filtro_status_qd")
+
+                df_q = df_invalidas.copy()
+                if filtro_motivo:
+                    df_q = df_q[df_q['MOTIVO DA INCONSISTÊNCIA'].isin(filtro_motivo)]
+                if filtro_mun_q and mun_col_q:
+                    df_q = df_q[df_q[mun_col_q].astype(str).isin(filtro_mun_q)]
+                if filtro_status_q and status_col_q:
+                    df_q = df_q[df_q[status_col_q].astype(str).isin(filtro_status_q)]
+
+                cols_preferidas = [
+                    'PROTOCOLO', 'TIPO NOTA', 'MUNICIPIO', 'MUNICÍPIO', 'REGIONAL_NORM',
+                    'LATITUDE', 'LONGITUDE', 'STATUS SISCO', 'STATUS LIST',
+                    'MOTIVO DA INCONSISTÊNCIA', 'NÍVEL'
+                ]
+                cols_to_show = []
+                for c in cols_preferidas:
+                    if c in df_q.columns and c not in cols_to_show:
+                        cols_to_show.append(c)
+
+                st.caption(f"Exibindo {len(df_q)} de {len(df_invalidas)} inconsistência(s).")
+                st.dataframe(df_q[cols_to_show], use_container_width=True, height=420, hide_index=True)
+
+                qd1, qd2 = st.columns(2)
+                with qd1:
+                    csv_q = df_q[cols_to_show].to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        "📥 Baixar inconsistências filtradas (CSV)",
+                        data=csv_q,
+                        file_name="inconsistencias_coordenadas.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                with qd2:
+                    try:
+                        buffer_q = io.BytesIO()
+                        with pd.ExcelWriter(buffer_q, engine='openpyxl') as writer:
+                            df_q[cols_to_show].to_excel(writer, sheet_name='Inconsistencias', index=False)
+                            resumo_motivos.to_excel(writer, sheet_name='Resumo_por_Motivo', index=False)
+                        st.download_button(
+                            "📊 Baixar inconsistências (Excel)",
+                            data=buffer_q.getvalue(),
+                            file_name="monitor_qualidade_dados.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    except Exception as exc:
+                        st.caption(f"Excel indisponível: {exc}")
+
+    # Diagnósticos adicionais de qualidade, sem remover registros nem alterar o mapa.
+    if msg_obras == "OK" and (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel) or bool(protocolo_pesquisa)):
+        dup_coords, dup_prot, qualidade_mun = analisar_qualidade_base(_mtime_seguro("BASE_LEVANTAMENTO_ATUALIZADA.xlsx"))
+        if not dup_coords.empty or not dup_prot.empty or not qualidade_mun.empty:
+            st.markdown("---")
+            with st.expander("🔎 Diagnóstico Preventivo — duplicidades e qualidade por município", expanded=False):
+                dqa, dqb = st.columns(2)
+                dqa.metric("Linhas com coordenada repetida", len(dup_coords))
+                dqb.metric("Linhas com protocolo repetido", len(dup_prot))
+                if not qualidade_mun.empty:
+                    st.markdown("##### 🌎 Qualidade geográfica por município")
+                    qm = qualidade_mun.sort_values(['QUALIDADE_%','TOTAL'], ascending=[True, False]).head(25).copy()
+                    fig_qm = px.bar(
+                        qm.sort_values('QUALIDADE_%', ascending=True),
+                        x='QUALIDADE_%', y='MUNICIPIO', orientation='h',
+                        text='QUALIDADE_%',
+                        title='Municípios com menor percentual de coordenadas válidas'
+                    )
+                    fig_qm.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig_qm.update_layout(xaxis_title='% de coordenadas válidas', yaxis_title='', height=max(380, 24*len(qm)+100), showlegend=False)
+                    st.plotly_chart(fig_qm, use_container_width=True)
+                if not dup_coords.empty:
+                    st.markdown("##### 📌 Coordenadas repetidas")
+                    cols_dup = [c for c in ['PROTOCOLO','NOME','MUNICIPIO','MUNICÍPIO','STATUS LIST','_LAT_Q','_LON_Q'] if c in dup_coords.columns]
+                    st.dataframe(dup_coords[cols_dup].head(500), use_container_width=True, hide_index=True)
+                if not dup_prot.empty:
+                    st.markdown("##### 🔁 Protocolos repetidos")
+                    cols_prot = [c for c in ['PROTOCOLO','NOME','MUNICIPIO','MUNICÍPIO','STATUS LIST','_LAT_Q','_LON_Q'] if c in dup_prot.columns]
+                    st.dataframe(dup_prot[cols_prot].head(500), use_container_width=True, hide_index=True)
+                pacote_diag = io.BytesIO()
+                with pd.ExcelWriter(pacote_diag, engine='openpyxl') as writer:
+                    if not dup_coords.empty: dup_coords.to_excel(writer, sheet_name='Coords_Duplicadas', index=False)
+                    if not dup_prot.empty: dup_prot.to_excel(writer, sheet_name='Protocolos_Repetidos', index=False)
+                    if not qualidade_mun.empty: qualidade_mun.to_excel(writer, sheet_name='Qualidade_Municipio', index=False)
+                st.download_button(
+                    "📊 Baixar diagnóstico preventivo (Excel)", data=pacote_diag.getvalue(),
+                    file_name="diagnostico_preventivo_mapa.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True, key="download_diag_preventivo"
+                )
+
+    # Exportação da visão de obras atualmente filtrada.
+    if msg_obras == "OK" and ((df_concluidas is not None and not df_concluidas.empty) or (df_andamento is not None and not df_andamento.empty)):
+        with st.expander("📥 Exportar visão atual de obras", expanded=False):
+            partes_export = []
+            if df_concluidas is not None and not df_concluidas.empty:
+                dc = df_concluidas.copy(); dc['_CAMADA_EXPORT'] = 'CONCLUÍDA'; partes_export.append(dc)
+            if df_andamento is not None and not df_andamento.empty:
+                da = df_andamento.copy(); da['_CAMADA_EXPORT'] = 'EM ANÁLISE'; partes_export.append(da)
+            df_export_atual = pd.concat(partes_export, ignore_index=True, sort=False) if partes_export else pd.DataFrame()
+            if not df_export_atual.empty:
+                # Acrescenta classificação de severidade e resumo de restrições somente no arquivo exportado.
+                if 'DISTANCIA_CONFLITO' in df_export_atual.columns:
+                    df_export_atual['SEVERIDADE_CONFLITO'] = df_export_atual['DISTANCIA_CONFLITO'].apply(classificar_severidade_distancia)
+                def _restr_export(r):
+                    try:
+                        itens = analisar_proximidade_areas_especiais(float(r['LAT_CLEAN']), float(r['LON_CLEAN']), 500.0)
+                        return ' | '.join(f"{i['categoria']}: {i['faixa']} ({i['distancia_m_aprox']:.0f}m aprox.)" for i in itens)
+                    except Exception:
+                        return ''
+                df_export_atual['RESTRICOES_PROXIMIDADE'] = df_export_atual.apply(_restr_export, axis=1)
+                st.caption(f"{len(df_export_atual)} obra(s) na visão filtrada atual.")
+                st.download_button(
+                    "📥 Baixar visão filtrada (Excel)",
+                    data=dataframe_para_excel_bytes(df_export_atual, 'Obras_Filtradas'),
+                    file_name="obras_visao_filtrada.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True, key="download_visao_filtrada"
+                )
+
+# -------------------------------------------------------------
+# 6. GERENCIAMENTO DE ZOOM E RENDERIZAÇÃO FINAL DO MAPA
+# -------------------------------------------------------------
+if coords_foco_sgo:
+    lats_foco = [p[0] for p in coords_foco_sgo]
+    lons_foco = [p[1] for p in coords_foco_sgo]
+    # Pequena margem garante que os dois pontos e o círculo de 50 m fiquem visíveis.
+    min_lat, max_lat = min(lats_foco), max(lats_foco)
+    min_lon, max_lon = min(lons_foco), max(lons_foco)
+    margem_lat = max(0.0006, (max_lat - min_lat) * 0.35)
+    margem_lon = max(0.0006, (max_lon - min_lon) * 0.35)
+    mapa.fit_bounds(
+        [[min_lat - margem_lat, min_lon - margem_lon], [max_lat + margem_lat, max_lon + margem_lon]],
+        padding_top_left=[35, 35],
+        padding_bottom_right=[35, 35],
+        max_zoom=19
+    )
+elif zoom_lat is not None and zoom_lon is not None:
+    mapa.fit_bounds([[zoom_lat - 0.001, zoom_lon - 0.001], [zoom_lat + 0.001, zoom_lon + 0.001]])
+elif protocolo_zoom_lat is not None and protocolo_zoom_lon is not None:
+    mapa.fit_bounds([[protocolo_zoom_lat - 0.001, protocolo_zoom_lon - 0.001], [protocolo_zoom_lat + 0.001, protocolo_zoom_lon + 0.001]])
+elif busca_lat is not None and busca_lon is not None:
+    mapa.fit_bounds([[busca_lat - 0.001, busca_lon - 0.001], [busca_lat + 0.001, busca_lon + 0.001]])
+elif busca_lats and busca_lons: 
+    mapa.fit_bounds([[min(busca_lats), min(busca_lons)], [max(busca_lats), max(busca_lons)]])
+elif municipios_sel and geo_data_ibge:
+    mun_foco_lats, mun_foco_lons = [], []
+    for feature in geo_data_ibge['features']:
+        if feature['properties'].get('MUNICIPIO') in municipios_sel:
+            geom = feature['geometry']
+            if geom['type'] == 'Polygon':
+                for pt in geom['coordinates'][0]: mun_foco_lats.append(pt[1]); mun_foco_lons.append(pt[0])
+            elif geom['type'] == 'MultiPolygon':
+                for poly in geom['coordinates']:
+                    for pt in poly[0]: mun_foco_lats.append(pt[1]); mun_foco_lons.append(pt[0])
+    if mun_foco_lats and mun_foco_lons: mapa.fit_bounds([[min(mun_foco_lats), min(mun_foco_lons)], [max(mun_foco_lats), max(mun_foco_lons)]])
+    elif todas_lats and todas_lons: mapa.fit_bounds([[min(todas_lats), min(todas_lons)], [max(todas_lats), max(todas_lons)]])
+elif todas_lats and todas_lons: 
+    mapa.fit_bounds([[min(todas_lats), min(todas_lons)], [max(todas_lats), max(todas_lons)]])
+
+with map_container:
+    st.markdown("### Mapa de Redes e Obras")
+    st_folium(mapa, use_container_width=True, height=850, returned_objects=[])
