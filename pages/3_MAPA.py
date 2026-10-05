@@ -1357,11 +1357,73 @@ with table_container:
         qtd_concluidas_distintas = int(df_tabela['Conflito (Concluída)'].astype(str).nunique())
         menor_dist = float(df_tabela['Distância (m)'].min()) if total_conflitos else 0.0
 
+        st.markdown("""
+        <style>
+        .nip-kpi-card {
+            border-radius: 18px;
+            padding: 18px 18px 16px 18px;
+            color: #ffffff;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.14);
+            border: 1px solid rgba(255,255,255,0.12);
+            min-height: 118px;
+            margin-bottom: 8px;
+        }
+        .nip-kpi-title {
+            font-size: 0.88rem;
+            font-weight: 700;
+            opacity: 0.95;
+            margin-bottom: 10px;
+            letter-spacing: 0.2px;
+        }
+        .nip-kpi-value {
+            font-size: 2.15rem;
+            font-weight: 800;
+            line-height: 1.0;
+            margin-bottom: 8px;
+        }
+        .nip-kpi-sub {
+            font-size: 0.82rem;
+            opacity: 0.92;
+            line-height: 1.25;
+        }
+        .nip-kpi-red {background: linear-gradient(135deg, #ff4d4f 0%, #c81e1e 100%);}
+        .nip-kpi-orange {background: linear-gradient(135deg, #ff9f43 0%, #ff6b00 100%);}
+        .nip-kpi-blue {background: linear-gradient(135deg, #4096ff 0%, #1d4ed8 100%);}
+        .nip-kpi-purple {background: linear-gradient(135deg, #8b5cf6 0%, #5b21b6 100%);}
+        .nip-kpi-amber {background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);}
+        .nip-kpi-green {background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);}
+        .nip-kpi-cyan {background: linear-gradient(135deg, #06b6d4 0%, #0f766e 100%);}
+        .nip-chip-wrap {display:flex; flex-wrap:wrap; gap:10px; margin: 8px 0 14px 0;}
+        .nip-chip {
+            display:inline-flex; align-items:center; gap:8px;
+            padding:10px 14px; border-radius:999px; font-size:0.88rem; font-weight:700;
+            color:#132238; background:#eef2ff; border:1px solid #d9e2ff;
+        }
+        .nip-chip strong {font-size:0.95rem;}
+        </style>
+        """, unsafe_allow_html=True)
+
+        def render_kpi_card(col, css_class, title, value, subtitle):
+            col.markdown(
+                f"""
+                <div class="nip-kpi-card {css_class}">
+
+                    <div class="nip-kpi-title">{title}</div>
+
+                    <div class="nip-kpi-value">{value}</div>
+
+                    <div class="nip-kpi-sub">{subtitle}</div>
+
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Conflitos", f"{total_conflitos:,}".replace(',', '.'))
-        k2.metric("Críticos (≤ 10 m)", f"{qtd_criticos:,}".replace(',', '.'))
-        k3.metric("Concluídas envolvidas", f"{qtd_concluidas_distintas:,}".replace(',', '.'))
-        k4.metric("Menor distância", f"{menor_dist:.2f} m")
+        render_kpi_card(k1, 'nip-kpi-red', '🚨 Conflitos encontrados', f"{total_conflitos:,}".replace(',', '.'), 'Obras novas dentro de 50 m de uma concluída.')
+        render_kpi_card(k2, 'nip-kpi-orange', '⚠️ Críticos (≤ 10 m)', f"{qtd_criticos:,}".replace(',', '.'), 'Casos mais urgentes para verificação imediata.')
+        render_kpi_card(k3, 'nip-kpi-blue', '🔵 Concluídas envolvidas', f"{qtd_concluidas_distintas:,}".replace(',', '.'), 'Quantidade de obras concluídas impactando novos registros.')
+        render_kpi_card(k4, 'nip-kpi-purple', '📏 Menor distância', f"{menor_dist:.2f} m", 'Menor separação geográfica encontrada entre as obras.')
 
         f1, f2, f3 = st.columns([1, 1, 1])
         with f1:
@@ -1461,9 +1523,9 @@ with table_container:
                 st.caption("Registros desta seção foram ignorados no mapa porque a coordenada não permite posicionamento geográfico confiável.")
 
                 q1, q2, q3 = st.columns(3)
-                q1.metric("Inconsistências", f"{len(df_invalidas):,}".replace(',', '.'))
-                q2.metric("Coordenadas válidas", f"{total_validas:,}".replace(',', '.'))
-                q3.metric("Qualidade geográfica", f"{perc_validas:.1f}%")
+                render_kpi_card(q1, 'nip-kpi-amber', '⚠️ Inconsistências', f"{len(df_invalidas):,}".replace(',', '.'), 'Registros ignorados no mapa por coordenada inválida ou não confiável.')
+                render_kpi_card(q2, 'nip-kpi-green', '✅ Coordenadas válidas', f"{total_validas:,}".replace(',', '.'), 'Linhas aptas para posicionamento geográfico no mapa.')
+                render_kpi_card(q3, 'nip-kpi-cyan', '🌎 Qualidade geográfica', f"{perc_validas:.1f}%", 'Percentual da base com latitude e longitude utilizáveis.')
 
                 resumo_motivos = (
                     df_invalidas['MOTIVO DA INCONSISTÊNCIA']
@@ -1474,6 +1536,13 @@ with table_container:
                 )
 
                 st.markdown("##### 📌 Resumo por motivo")
+                chips = []
+                for _, row in resumo_motivos.head(6).iterrows():
+                    motivo = str(row['Motivo'])
+                    qtd = int(row['Quantidade'])
+                    chips.append(f"<div class='nip-chip'>📍 <span>{motivo}</span> <strong>{qtd:,}</strong></div>".replace(',', '.'))
+                if chips:
+                    st.markdown(f"<div class='nip-chip-wrap'>{''.join(chips)}</div>", unsafe_allow_html=True)
                 st.dataframe(resumo_motivos, use_container_width=True, hide_index=True)
 
                 fq1, fq2, fq3 = st.columns(3)
