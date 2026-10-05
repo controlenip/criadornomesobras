@@ -771,19 +771,213 @@ with kpi_container:
     st.markdown("<br>", unsafe_allow_html=True)
 
     if msg_obras == "OK" and val_conf > 0:
-        df_conf = df_andamento[df_andamento['CONFLITO']]
+        df_conf = df_andamento[df_andamento['CONFLITO']].copy()
         if not df_conf.empty:
-            col_chart1, col_chart2 = st.columns(2)
+            st.markdown("### 📊 Análise dos Conflitos")
+            st.caption("Visão gerencial das cidades, status e criticidade das obras sobrepostas em até 50 metros.")
+
+            # Padroniza os status usados nos gráficos para as mesmas nomenclaturas do mapa.
+            def _status_dashboard(valor):
+                s = remove_accents(str(valor)).upper().strip()
+                if s in ['', 'NAN', 'NONE', 'SEM INFORMACAO']:
+                    return '0'
+                if s == '0':
+                    return '0'
+                if 'CORRECAO DE LEVANTAMENTO' in s:
+                    return 'Correção de levantamento'
+                if 'ANALISE DE LEVANTAMENTO' in s:
+                    return 'Análise de levantamento'
+                if 'IMPRODUTIVO' in s:
+                    return 'Improdutivo'
+                if 'EM LEVANTAMENTO' in s:
+                    return 'Em levantamento'
+                return str(valor).strip() or '0'
+
+            df_conf['_STATUS_DASH'] = df_conf['STATUS LIST'].apply(_status_dashboard)
+            df_conf['_DIST_M'] = pd.to_numeric(df_conf['DISTANCIA_CONFLITO'], errors='coerce').fillna(0.0)
+            df_conf['_SEVERIDADE_DASH'] = pd.cut(
+                df_conf['_DIST_M'],
+                bins=[-0.001, 10, 25, 50],
+                labels=['Crítico (≤ 10 m)', 'Alto (10–25 m)', 'Médio (25–50 m)'],
+                include_lowest=True
+            ).astype(str)
+
+            # Controle do ranking sem poluir o gráfico quando há muitos municípios.
+            top_opt = st.radio(
+                "Quantidade de cidades no ranking:",
+                ["Top 10", "Top 15", "Todos"],
+                horizontal=True,
+                index=0,
+                key="ranking_cidades_conflito"
+            )
+            limite_top = 10 if top_opt == "Top 10" else (15 if top_opt == "Top 15" else None)
+
+            # ---------- Linha 1: Cidades + Status ----------
+            col_chart1, col_chart2 = st.columns(2, gap="large")
             with col_chart1:
-                df_barras = df_conf['MUNICIPIO_NORM'].value_counts().reset_index()
-                fig1 = px.bar(df_barras, x='MUNICIPIO_NORM', y='count', title="📍 Cidades com Mais Conflitos", color_discrete_sequence=['#d62728'], text='count')
-                fig1.update_traces(textposition='outside')
-                fig1.update_layout(xaxis_title="", yaxis_title="Qtd de Obras em Conflito")
+                df_barras = (
+                    df_conf['MUNICIPIO_NORM']
+                    .fillna('SEM MUNICÍPIO')
+                    .replace('', 'SEM MUNICÍPIO')
+                    .value_counts()
+                    .rename_axis('Município')
+                    .reset_index(name='Conflitos')
+                )
+                if limite_top is not None:
+                    df_barras = df_barras.head(limite_top)
+                # Para barra horizontal, ordem crescente coloca o maior no topo visual.
+                df_barras_plot = df_barras.sort_values('Conflitos', ascending=True)
+                total_conf = max(1, int(len(df_conf)))
+                df_barras_plot['Percentual'] = (df_barras_plot['Conflitos'] / total_conf * 100).round(1)
+                df_barras_plot['Rótulo'] = df_barras_plot.apply(
+                    lambda r: f"{int(r['Conflitos'])} ({r['Percentual']:.1f}%)", axis=1
+                )
+
+                fig1 = px.bar(
+                    df_barras_plot,
+                    x='Conflitos',
+                    y='Município',
+                    orientation='h',
+                    title="📍 Cidades com Mais Conflitos",
+                    text='Rótulo',
+                    color_discrete_sequence=['#d62728']
+                )
+                fig1.update_traces(
+                    textposition='outside',
+                    hovertemplate='<b>%{y}</b><br>Conflitos: %{x}<extra></extra>'
+                )
+                fig1.update_layout(
+                    xaxis_title="Quantidade de conflitos",
+                    yaxis_title="",
+                    showlegend=False,
+                    height=max(360, 28 * len(df_barras_plot) + 120),
+                    margin=dict(l=10, r=55, t=55, b=30)
+                )
                 st.plotly_chart(fig1, use_container_width=True)
+
             with col_chart2:
-                fig2 = px.pie(df_conf, names='STATUS LIST', title="📊 Status das Obras Sobrepostas", hole=0.4, color_discrete_sequence=['#ff7f0e', '#ffbb78', '#d62728'])
-                fig2.update_traces(textposition='outside', textinfo='value+percent')
+                ordem_status = ['0', 'Em levantamento', 'Análise de levantamento', 'Improdutivo', 'Correção de levantamento']
+                cores_status = {
+                    '0': '#94a3b8',
+                    'Em levantamento': '#22c55e',
+                    'Análise de levantamento': '#eab308',
+                    'Improdutivo': '#f97316',
+                    'Correção de levantamento': '#7c3aed'
+                }
+                df_status = (
+                    df_conf['_STATUS_DASH']
+                    .value_counts()
+                    .rename_axis('Status')
+                    .reset_index(name='Quantidade')
+                )
+                df_status['Status'] = pd.Categorical(df_status['Status'], categories=ordem_status, ordered=True)
+                df_status = df_status.sort_values('Status').dropna(subset=['Status'])
+
+                fig2 = px.pie(
+                    df_status,
+                    names='Status',
+                    values='Quantidade',
+                    title="📊 Status das Obras Sobrepostas",
+                    hole=0.58,
+                    color='Status',
+                    color_discrete_map=cores_status,
+                    category_orders={'Status': ordem_status}
+                )
+                fig2.update_traces(
+                    textposition='inside',
+                    textinfo='percent',
+                    hovertemplate='<b>%{label}</b><br>Quantidade: %{value}<br>Percentual: %{percent}<extra></extra>'
+                )
+                fig2.add_annotation(
+                    text=f"<b>{len(df_conf)}</b><br>Conflitos",
+                    x=0.5, y=0.5, showarrow=False,
+                    font=dict(size=17)
+                )
+                fig2.update_layout(
+                    legend_title_text='STATUS LIST',
+                    height=max(360, 28 * len(df_barras_plot) + 120),
+                    margin=dict(l=10, r=10, t=55, b=20)
+                )
                 st.plotly_chart(fig2, use_container_width=True)
+
+            # ---------- Linha 2: Severidade + Cidade x Severidade ----------
+            col_chart3, col_chart4 = st.columns(2, gap="large")
+            with col_chart3:
+                ordem_sev = ['Crítico (≤ 10 m)', 'Alto (10–25 m)', 'Médio (25–50 m)']
+                cores_sev = {
+                    'Crítico (≤ 10 m)': '#dc2626',
+                    'Alto (10–25 m)': '#f97316',
+                    'Médio (25–50 m)': '#eab308'
+                }
+                df_sev = (
+                    df_conf['_SEVERIDADE_DASH']
+                    .value_counts()
+                    .reindex(ordem_sev, fill_value=0)
+                    .rename_axis('Severidade')
+                    .reset_index(name='Quantidade')
+                )
+                fig3 = px.bar(
+                    df_sev,
+                    x='Severidade',
+                    y='Quantidade',
+                    title="🚨 Conflitos por Faixa de Distância",
+                    color='Severidade',
+                    color_discrete_map=cores_sev,
+                    text='Quantidade',
+                    category_orders={'Severidade': ordem_sev}
+                )
+                fig3.update_traces(
+                    textposition='outside',
+                    hovertemplate='<b>%{x}</b><br>Conflitos: %{y}<extra></extra>'
+                )
+                fig3.update_layout(
+                    xaxis_title="",
+                    yaxis_title="Quantidade de conflitos",
+                    showlegend=False,
+                    height=390,
+                    margin=dict(l=10, r=20, t=55, b=70)
+                )
+                st.plotly_chart(fig3, use_container_width=True)
+
+            with col_chart4:
+                cidades_top = df_barras['Município'].tolist()
+                df_city_sev = df_conf[df_conf['MUNICIPIO_NORM'].isin(cidades_top)].copy()
+                df_city_sev['MUNICIPIO_NORM'] = df_city_sev['MUNICIPIO_NORM'].fillna('SEM MUNICÍPIO').replace('', 'SEM MUNICÍPIO')
+                pivot = (
+                    df_city_sev.groupby(['MUNICIPIO_NORM', '_SEVERIDADE_DASH'])
+                    .size()
+                    .unstack(fill_value=0)
+                    .reindex(columns=ordem_sev, fill_value=0)
+                )
+                # Ordena pelo total de conflitos para manter leitura gerencial.
+                pivot['_TOTAL'] = pivot.sum(axis=1)
+                pivot = pivot.sort_values('_TOTAL', ascending=True).drop(columns=['_TOTAL']).reset_index()
+                df_stack = pivot.melt(
+                    id_vars='MUNICIPIO_NORM',
+                    value_vars=ordem_sev,
+                    var_name='Severidade',
+                    value_name='Quantidade'
+                )
+                fig4 = px.bar(
+                    df_stack,
+                    x='Quantidade',
+                    y='MUNICIPIO_NORM',
+                    orientation='h',
+                    color='Severidade',
+                    title="🏙️ Cidade × Severidade",
+                    color_discrete_map=cores_sev,
+                    category_orders={'Severidade': ordem_sev}
+                )
+                fig4.update_layout(
+                    barmode='stack',
+                    xaxis_title="Quantidade de conflitos",
+                    yaxis_title="",
+                    legend_title_text='Severidade',
+                    height=max(390, 28 * len(pivot) + 120),
+                    margin=dict(l=10, r=20, t=55, b=30)
+                )
+                fig4.update_traces(hovertemplate='<b>%{y}</b><br>%{fullData.name}: %{x}<extra></extra>')
+                st.plotly_chart(fig4, use_container_width=True)
 
 # ==========================================
 # 4. CONSTRUÇÃO DO MAPA FOLIUM E SIMBOLOGIA
