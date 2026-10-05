@@ -1697,7 +1697,7 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(st
         cluster_todas.add_to(mapa)
 
     if mostrar_concluidas and df_concluidas is not None:
-        fg_concluidas = MarkerCluster(name="Obras Concluídas", show=True)
+        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas", show=True)
         for _, row in df_concluidas.iterrows():
             protocolo = str(row.get('PROTOCOLO', 'S/N'))
             lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
