@@ -1133,7 +1133,29 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_heatmap or mostrar_tod
             })
                 
             html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: red; border-bottom: 2px solid red; padding-bottom: 5px;">🚨 CONFLITO DETECTADO</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO (NOVA):</b></td><td>{html.escape(protocolo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME (NOVA):</b></td><td>{html.escape(nome_nova)}</td></tr><tr><td style='color: red; padding: 2px;'><b>CONFLITO COM:</b></td><td style='color: red;'>{html.escape(row['PROTOCOLO_CONFLITO'])} ({row['DISTANCIA_CONFLITO']:.1f}m)</td></tr><tr><td style='color: red; padding: 2px;'><b>NOME (CONCLUÍDA):</b></td><td style='color: red;'>{html.escape(nome_alvo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
-            folium.CircleMarker(location=[lat, lon], radius=6, color='black', weight=1, fill=True, fillColor='red', fillOpacity=0.9, tooltip=f"Conflito: {html.escape(protocolo)}", popup=folium.Popup(html_popup, max_width=350)).add_to(fg_andamento)
+
+            # Círculo operacional de 50 m ao redor da obra em conflito.
+            # Este bloco fica no fluxo padrão de OBRAS CONFLITANTES, portanto
+            # aparece mesmo quando o mapa não foi aberto pelo botão do CRIAR SGO.
+            folium.Circle(
+                location=[lat, lon],
+                radius=50.0,
+                color='#ff0000',
+                weight=4,
+                opacity=1.0,
+                fill=True,
+                fill_color='#ff0000',
+                fill_opacity=0.10,
+                tooltip=f"Raio de conflito: 50 m — {html.escape(protocolo)}",
+                pane='overlayPane'
+            ).add_to(fg_andamento)
+
+            folium.CircleMarker(
+                location=[lat, lon], radius=6, color='black', weight=1,
+                fill=True, fillColor='red', fillOpacity=0.9,
+                tooltip=f"Conflito: {html.escape(protocolo)}",
+                popup=folium.Popup(html_popup, max_width=350)
+            ).add_to(fg_andamento)
         fg_andamento.add_to(mapa)
 
 # ==========================================
