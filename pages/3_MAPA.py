@@ -948,6 +948,12 @@ with st.sidebar:
                 for nome, erro in st.session_state['_kml_erros'].items():
                     st.code(f"{nome}: {erro}")
     
+    # Evita cruzamentos geoespaciais caros quando nenhuma camada especial está ativa.
+    alguma_area_especial_ativa = any([
+        mostrar_quilombos, mostrar_indigenas, mostrar_arqueologia,
+        mostrar_uc_federal, mostrar_uc_estadual, mostrar_uc_municipal
+    ])
+
     with st.expander("🚧 6. Obras e Projetos", expanded=True):
         mostrar_todas_obras = st.checkbox("📍 TODAS AS OBRAS (Clusters)", value=False, key="chk_todas_obras")
         mostrar_concluidas = st.checkbox("🔵 OBRAS CONCLUÍDAS", value=False, key="chk_concluidas") 
@@ -1610,6 +1616,13 @@ def calcular_rede_proxima(lat, lon):
     dist_m = haversine(lat, lon, g_lat, g_lon) * 1000
     return f"<b>{html.escape(str(tipo))}</b> {html.escape(str(nome))} ({dist_m:.1f}m)"
 
+
+def verificar_areas_popup_otimizado(lat, lon):
+    """Só executa o cruzamento pesado com KML quando alguma camada especial está ativa."""
+    if not alguma_area_especial_ativa:
+        return "<span style='color:gray'>Ative uma camada de Área Especial para analisar</span>"
+    return verificar_areas_da_obra(lat, lon)
+
 # ==========================================
 # RENDERIZAÇÃO DAS ÁREAS ESPECIAIS (COM POPUPS)
 # ==========================================
@@ -1649,7 +1662,7 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(st
             for _, row in df_concluidas.iterrows():
                 lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
                 sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
-                areas_especiais = verificar_areas_da_obra(lat, lon) 
+                areas_especiais = verificar_areas_popup_otimizado(lat, lon) 
                 rede_prox = calcular_rede_proxima(lat, lon)
                 
                 html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: #1f77b4; border-bottom: 2px solid #1f77b4; padding-bottom: 5px;">✅ OBRA CONCLUÍDA</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(str(row.get('PROTOCOLO', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME:</b></td><td>{html.escape(str(row.get('NOME', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
@@ -1675,7 +1688,7 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(st
                 cor = cores_status_list.get(status_norm_cor, '#2ca02c')
                 titulo = f"🚧 {status_list_atual}"
                 sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
-                areas_especiais = verificar_areas_da_obra(lat, lon) 
+                areas_especiais = verificar_areas_popup_otimizado(lat, lon) 
                 rede_prox = calcular_rede_proxima(lat, lon)
                 
                 html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: {cor}; border-bottom: 2px solid {cor}; padding-bottom: 5px;">{titulo}</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(str(row.get('PROTOCOLO', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME:</b></td><td>{html.escape(str(row.get('NOME', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
@@ -1684,13 +1697,13 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(st
         cluster_todas.add_to(mapa)
 
     if mostrar_concluidas and df_concluidas is not None:
-        fg_concluidas = folium.FeatureGroup(name="Obras Concluídas", show=True)
+        fg_concluidas = MarkerCluster(name="Obras Concluídas", show=True)
         for _, row in df_concluidas.iterrows():
             protocolo = str(row.get('PROTOCOLO', 'S/N'))
             lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
             cor_concluida = '#1f77b4'
             sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
-            areas_especiais = verificar_areas_da_obra(lat, lon)
+            areas_especiais = verificar_areas_popup_otimizado(lat, lon)
             rede_prox = calcular_rede_proxima(lat, lon)
             
             html_popup = f"""<div style="min-width: 250px; font-family: sans-serif;"><h4 style="margin-top: 0; color: {cor_concluida}; border-bottom: 2px solid {cor_concluida}; padding-bottom: 5px;">✅ OBRA CONCLUÍDA</h4><table style="width:100%;"><tr><td style="color: #555; padding: 2px;"><b>PROTOCOLO:</b></td><td>{html.escape(protocolo)}</td></tr><tr><td style="color: #555; padding: 2px;"><b>NOME:</b></td><td>{html.escape(str(row.get('NOME', 'S/N')))}</td></tr><tr><td style="color: #555; padding: 2px;"><b>REDE ELÉTRICA:</b></td><td>{rede_prox}</td></tr><tr><td style="color: #555; padding: 2px;"><b>ÁREAS:</b></td><td>{areas_especiais}</td></tr><tr><td colspan='2' style='padding-top:10px;'><a href="{sv_url}" target="_blank" style="color: #0066cc; font-weight: bold; text-decoration: none;">👁️ Abrir Street View</a></td></tr></table></div>"""
@@ -1712,7 +1725,7 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(st
             nome_nova = str(row.get('NOME', 'S/N'))
             nome_alvo = str(row.get('NOME_CONCLUIDA', 'S/N'))
             sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
-            areas_especiais = verificar_areas_da_obra(lat, lon)
+            areas_especiais = verificar_areas_popup_otimizado(lat, lon)
             rede_prox = calcular_rede_proxima(lat, lon)
             
             dist_conflito = float(row['DISTANCIA_CONFLITO'])
@@ -2238,6 +2251,9 @@ with table_container:
                 )
 
     # Exportação da visão de obras atualmente filtrada.
+    # IMPORTANTE: análises geoespaciais de proximidade são calculadas SOMENTE
+    # quando o usuário solicita a geração do arquivo. Isso evita travar o mapa
+    # em todo rerun do Streamlit.
     if msg_obras == "OK" and ((df_concluidas is not None and not df_concluidas.empty) or (df_andamento is not None and not df_andamento.empty)):
         with st.expander("📥 Exportar visão atual de obras", expanded=False):
             partes_export = []
@@ -2246,25 +2262,57 @@ with table_container:
             if df_andamento is not None and not df_andamento.empty:
                 da = df_andamento.copy(); da['_CAMADA_EXPORT'] = 'EM ANÁLISE'; partes_export.append(da)
             df_export_atual = pd.concat(partes_export, ignore_index=True, sort=False) if partes_export else pd.DataFrame()
+
             if not df_export_atual.empty:
-                # Acrescenta classificação de severidade e resumo de restrições somente no arquivo exportado.
-                if 'DISTANCIA_CONFLITO' in df_export_atual.columns:
-                    df_export_atual['SEVERIDADE_CONFLITO'] = df_export_atual['DISTANCIA_CONFLITO'].apply(classificar_severidade_distancia)
-                def _restr_export(r):
-                    try:
-                        itens = analisar_proximidade_areas_especiais(float(r['LAT_CLEAN']), float(r['LON_CLEAN']), 500.0)
-                        return ' | '.join(f"{i['categoria']}: {i['faixa']} ({i['distancia_m_aprox']:.0f}m aprox.)" for i in itens)
-                    except Exception:
-                        return ''
-                df_export_atual['RESTRICOES_PROXIMIDADE'] = df_export_atual.apply(_restr_export, axis=1)
                 st.caption(f"{len(df_export_atual)} obra(s) na visão filtrada atual.")
-                st.download_button(
-                    "📥 Baixar visão filtrada (Excel)",
-                    data=dataframe_para_excel_bytes(df_export_atual, 'Obras_Filtradas'),
-                    file_name="obras_visao_filtrada.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True, key="download_visao_filtrada"
+                incluir_restricoes_export = st.checkbox(
+                    "Incluir análise de proximidade com Áreas Especiais (mais demorado)",
+                    value=False,
+                    key="export_incluir_restricoes"
                 )
+
+                chave_export = (
+                    len(df_export_atual),
+                    tuple(sorted(regioes_sel)),
+                    tuple(sorted(municipios_sel)),
+                    tuple(sorted(status_list_sel)),
+                    bool(incluir_restricoes_export),
+                    _mtime_seguro("BASE_LEVANTAMENTO_ATUALIZADA.xlsx")
+                )
+
+                if st.button("⚙️ Gerar arquivo da visão filtrada", use_container_width=True, key="gerar_visao_filtrada"):
+                    with st.spinner("Preparando arquivo filtrado..."):
+                        df_exp = df_export_atual.copy()
+                        if 'DISTANCIA_CONFLITO' in df_exp.columns:
+                            df_exp['SEVERIDADE_CONFLITO'] = df_exp['DISTANCIA_CONFLITO'].apply(classificar_severidade_distancia)
+
+                        if incluir_restricoes_export:
+                            def _restr_export(r):
+                                try:
+                                    itens = analisar_proximidade_areas_especiais(float(r['LAT_CLEAN']), float(r['LON_CLEAN']), 500.0)
+                                    return ' | '.join(
+                                        f"{i['categoria']}: {i['faixa']} ({i['distancia_m_aprox']:.0f}m aprox.)"
+                                        for i in itens
+                                    )
+                                except Exception:
+                                    return ''
+                            df_exp['RESTRICOES_PROXIMIDADE'] = df_exp.apply(_restr_export, axis=1)
+
+                        st.session_state['visao_filtrada_excel_bytes'] = dataframe_para_excel_bytes(df_exp, 'Obras_Filtradas')
+                        st.session_state['visao_filtrada_excel_chave'] = chave_export
+
+                if st.session_state.get('visao_filtrada_excel_bytes') is not None:
+                    if st.session_state.get('visao_filtrada_excel_chave') == chave_export:
+                        st.download_button(
+                            "📥 Baixar visão filtrada (Excel)",
+                            data=st.session_state['visao_filtrada_excel_bytes'],
+                            file_name="obras_visao_filtrada.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="download_visao_filtrada"
+                        )
+                    else:
+                        st.caption("Os filtros mudaram. Clique em **Gerar arquivo da visão filtrada** novamente.")
 
 # -------------------------------------------------------------
 # 6. GERENCIAMENTO DE ZOOM E RENDERIZAÇÃO FINAL DO MAPA
