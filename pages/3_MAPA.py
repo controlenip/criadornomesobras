@@ -661,22 +661,26 @@ with st.sidebar:
         mostrar_concluidas = st.checkbox("🔵 OBRAS CONCLUÍDAS", value=False) 
         mostrar_conflitantes = st.checkbox("🚨 OBRAS CONFLITANTES (Raio 50m)", value=False)
 
-        st.markdown("**📋 Filtrar por STATUS LIST**")
-        opcoes_status_list = [
-            "0",
-            "EM LEVANTAMENTO",
-            "ANÁLISE DE LEVANTAMENTO",
-            "IMPRODUTIVO",
-            "CORREÇÃO DE LEVANTAMENTO",
-        ]
-        status_list_sel = st.multiselect(
-            "STATUS LIST:",
-            opcoes_status_list,
-            default=[],
-            placeholder="Selecione um ou mais status...",
-            label_visibility="collapsed",
-            key="filtro_status_list_mapa",
-        )
+        st.markdown("---")
+        mostrar_status_0 = st.checkbox("⚪ STATUS LIST: 0", value=False, key="mostrar_status_0")
+        mostrar_em_levantamento = st.checkbox("🟢 STATUS LIST: EM LEVANTAMENTO", value=False, key="mostrar_status_em_levantamento")
+        mostrar_analise_levantamento = st.checkbox("🟡 STATUS LIST: ANÁLISE DE LEVANTAMENTO", value=False, key="mostrar_status_analise_levantamento")
+        mostrar_improdutivo = st.checkbox("🟠 STATUS LIST: IMPRODUTIVO", value=False, key="mostrar_status_improdutivo")
+        mostrar_correcao_levantamento = st.checkbox("🟣 STATUS LIST: CORREÇÃO DE LEVANTAMENTO", value=False, key="mostrar_status_correcao_levantamento")
+
+        # Mantém uma lista interna apenas para o processamento do mapa.
+        # Para o usuário, cada STATUS LIST aparece como uma caixa de marcação independente.
+        status_list_sel = []
+        if mostrar_status_0:
+            status_list_sel.append("0")
+        if mostrar_em_levantamento:
+            status_list_sel.append("EM LEVANTAMENTO")
+        if mostrar_analise_levantamento:
+            status_list_sel.append("ANÁLISE DE LEVANTAMENTO")
+        if mostrar_improdutivo:
+            status_list_sel.append("IMPRODUTIVO")
+        if mostrar_correcao_levantamento:
+            status_list_sel.append("CORREÇÃO DE LEVANTAMENTO")
         
         msg_obras, df_concluidas, df_andamento, df_invalidas = "OK", None, None, None
         if mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel) or bool(foco_mapa_sgo):
