@@ -407,7 +407,7 @@ def carregar_e_cruzar_obras():
         
         def normalizar(x): return remove_accents(str(x)).upper().strip()
         df_obras['STATUS_LIST_NORM'] = df_obras[status_list_col].apply(normalizar)
-        status_alvos = ['0', 'EM LEVANTAMENTO', 'CORRECAO DE LEVANTAMENTO']
+        status_alvos = ['0', 'EM LEVANTAMENTO', 'ANALISE DE LEVANTAMENTO', 'IMPRODUTIVO', 'CORRECAO DE LEVANTAMENTO']
         mask_andamento = df_obras['STATUS_LIST_NORM'].isin(status_alvos)
         df_andamento = df_obras[mask_andamento & (~mask_concluida)].copy()
         
@@ -660,9 +660,26 @@ with st.sidebar:
         mostrar_todas_obras = st.checkbox("📍 TODAS AS OBRAS (Clusters)", value=False)
         mostrar_concluidas = st.checkbox("🔵 OBRAS CONCLUÍDAS", value=False) 
         mostrar_conflitantes = st.checkbox("🚨 OBRAS CONFLITANTES (Raio 50m)", value=False)
+
+        st.markdown("**📋 Filtrar por STATUS LIST**")
+        opcoes_status_list = [
+            "0",
+            "EM LEVANTAMENTO",
+            "ANÁLISE DE LEVANTAMENTO",
+            "IMPRODUTIVO",
+            "CORREÇÃO DE LEVANTAMENTO",
+        ]
+        status_list_sel = st.multiselect(
+            "STATUS LIST:",
+            opcoes_status_list,
+            default=[],
+            placeholder="Selecione um ou mais status...",
+            label_visibility="collapsed",
+            key="filtro_status_list_mapa",
+        )
         
         msg_obras, df_concluidas, df_andamento, df_invalidas = "OK", None, None, None
-        if mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(foco_mapa_sgo):
+        if mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel) or bool(foco_mapa_sgo):
             msg_obras, df_concluidas, df_andamento, df_invalidas = carregar_e_cruzar_obras()
             if msg_obras != "OK": st.sidebar.warning(f"⚠️ {msg_obras}")
             else:
@@ -674,6 +691,12 @@ with st.sidebar:
                     if df_concluidas is not None and not df_concluidas.empty: df_concluidas = df_concluidas[df_concluidas['MUNICIPIO_NORM'].isin(municipios_sel)]
                     if df_andamento is not None and not df_andamento.empty: df_andamento = df_andamento[df_andamento['MUNICIPIO_NORM'].isin(municipios_sel)]
                     if df_invalidas is not None and not df_invalidas.empty: df_invalidas = df_invalidas[df_invalidas['MUNICIPIO_NORM'].isin(municipios_sel)]
+
+                # Filtro opcional por STATUS LIST. A normalização remove acentos para
+                # casar corretamente com a coluna STATUS_LIST_NORM gerada na leitura.
+                if status_list_sel and df_andamento is not None and not df_andamento.empty:
+                    status_norm_sel = [remove_accents(x).upper().strip() for x in status_list_sel]
+                    df_andamento = df_andamento[df_andamento['STATUS_LIST_NORM'].isin(status_norm_sel)]
 
                 qtd_conflitos = df_andamento['CONFLITO'].sum() if df_andamento is not None else 0
                 
@@ -1032,11 +1055,12 @@ if mostrar_uc_municipal: adicionar_camada_area(geo_uc_mun, "UC Municipal", mapa,
 # ==========================================
 dados_tabela_conflito = []
 
-if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras) and msg_obras == "OK":
+if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel)) and msg_obras == "OK":
     
-    if mostrar_todas_obras:
-        cluster_todas = MarkerCluster(name="Todas as Obras (Geral)")
-        if df_concluidas is not None:
+    if mostrar_todas_obras or bool(status_list_sel):
+        nome_cluster_obras = "Todas as Obras (Geral)" if mostrar_todas_obras else "Obras por STATUS LIST"
+        cluster_todas = MarkerCluster(name=nome_cluster_obras)
+        if mostrar_todas_obras and df_concluidas is not None:
             for _, row in df_concluidas.iterrows():
                 lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
                 sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
@@ -1051,7 +1075,8 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras) and msg_o
             for _, row in df_andamento.iterrows():
                 lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
                 cor = 'red' if row['CONFLITO'] else '#2ca02c'
-                titulo = "🚨 CONFLITO!" if row['CONFLITO'] else "🚧 EM ANDAMENTO"
+                status_list_atual = str(row.get('STATUS_LIST_NORM', '')).strip() or 'SEM STATUS'
+                titulo = "🚨 CONFLITO!" if row['CONFLITO'] else f"🚧 {status_list_atual}"
                 sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
                 areas_especiais = verificar_areas_da_obra(lat, lon) 
                 rede_prox = calcular_rede_proxima(lat, lon)
@@ -1276,7 +1301,7 @@ with table_container:
         csv = df_tabela.to_csv(index=False).encode('utf-8-sig')
         st.download_button(label="📥 Baixar Relatório (CSV)", data=csv, file_name="conflitos.csv", mime="text/csv", type="primary")
 
-    if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras) and msg_obras == "OK":
+    if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(status_list_sel)) and msg_obras == "OK":
         if df_invalidas is not None and not df_invalidas.empty:
             st.markdown("---")
             with st.expander(f"⚠️ Monitor de Qualidade de Dados ({len(df_invalidas)} Inconsistências na Planilha)"):
