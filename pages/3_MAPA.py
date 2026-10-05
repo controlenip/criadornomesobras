@@ -10,7 +10,7 @@ import math
 import requests
 import unicodedata
 import folium
-from folium.plugins import HeatMap, MarkerCluster, MeasureControl, Draw
+from folium.plugins import MarkerCluster, MeasureControl, Draw
 import gc
 from streamlit_folium import st_folium
 import html
@@ -432,22 +432,6 @@ def carregar_e_cruzar_obras():
         return "OK", df_concluidas, df_andamento, df_invalidas
     except Exception as e: return f"Erro processando dados: {str(e)}", None, None, None
 
-@st.cache_data(ttl=300)
-def obter_radar_chuva_url():
-    try:
-        req = requests.get("https://api.rainviewer.com/public/weather-maps.json", timeout=5)
-        data = req.json()
-        host = data.get('host', 'https://tilecache.rainviewer.com')
-        path_chuva = data['radar']['past'][-1]['path']
-        url_chuva = f"{host}{path_chuva}/256/{{z}}/{{x}}/{{y}}/2/1_1.png"
-        path_nuvem = None
-        if 'satellite' in data and 'infrared' in data['satellite']:
-            path_nuvem = data['satellite']['infrared'][-1]['path']
-            url_nuvem = f"{host}{path_nuvem}/256/{{z}}/{{x}}/{{y}}/0/1_1.png"
-        return url_chuva, url_nuvem
-    except:
-        return None, None
-
 # ==========================================
 # 2. ESTRUTURA DA TELA E CONTAINERS
 # ==========================================
@@ -662,12 +646,9 @@ with st.sidebar:
         mostrar_todas_obras = st.checkbox("📍 TODAS AS OBRAS (Clusters)", value=False)
         mostrar_concluidas = st.checkbox("🔵 OBRAS CONCLUÍDAS", value=False) 
         mostrar_conflitantes = st.checkbox("🚨 OBRAS CONFLITANTES (Raio 50m)", value=False)
-        mostrar_heatmap = st.checkbox("🔥 Mapa de Calor (Densidade de Obras)", value=False)
-        mostrar_clima = st.checkbox("🌦️ Radar Climático (Nuvens e Chuva)", value=False)
-        mostrar_streetview = st.checkbox("🛣️ Cobertura Street View", value=False)
         
         msg_obras, df_concluidas, df_andamento, df_invalidas = "OK", None, None, None
-        if mostrar_concluidas or mostrar_conflitantes or mostrar_heatmap or mostrar_todas_obras or bool(foco_mapa_sgo):
+        if mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(foco_mapa_sgo):
             msg_obras, df_concluidas, df_andamento, df_invalidas = carregar_e_cruzar_obras()
             if msg_obras != "OK": st.sidebar.warning(f"⚠️ {msg_obras}")
             else:
@@ -679,26 +660,6 @@ with st.sidebar:
                     if df_concluidas is not None and not df_concluidas.empty: df_concluidas = df_concluidas[df_concluidas['MUNICIPIO_NORM'].isin(municipios_sel)]
                     if df_andamento is not None and not df_andamento.empty: df_andamento = df_andamento[df_andamento['MUNICIPIO_NORM'].isin(municipios_sel)]
                     if df_invalidas is not None and not df_invalidas.empty: df_invalidas = df_invalidas[df_invalidas['MUNICIPIO_NORM'].isin(municipios_sel)]
-
-                val_mins, val_maxs = [], []
-                if df_concluidas is not None and not df_concluidas.empty: 
-                    val_mins.append(df_concluidas['DATA_DT'].min()); val_maxs.append(df_concluidas['DATA_DT'].max())
-                if df_andamento is not None and not df_andamento.empty: 
-                    val_mins.append(df_andamento['DATA_DT'].min()); val_maxs.append(df_andamento['DATA_DT'].max())
-                val_mins = [d for d in val_mins if pd.notnull(d)]
-                val_maxs = [d for d in val_maxs if pd.notnull(d)]
-                
-                if val_mins and val_maxs:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    min_dt, max_dt = min(val_mins).date(), max(val_maxs).date()
-                    if min_dt != max_dt:
-                        data_filtro = st.slider("🕒 Linha do Tempo (Data de Abertura):", min_value=min_dt, max_value=max_dt, value=(min_dt, max_dt), format="DD/MM/YY")
-                        if df_concluidas is not None and not df_concluidas.empty:
-                            mask_c = (df_concluidas['DATA_DT'].dt.date >= data_filtro[0]) & (df_concluidas['DATA_DT'].dt.date <= data_filtro[1])
-                            df_concluidas = df_concluidas[mask_c | df_concluidas['DATA_DT'].isnull()]
-                        if df_andamento is not None and not df_andamento.empty:
-                            mask_a = (df_andamento['DATA_DT'].dt.date >= data_filtro[0]) & (df_andamento['DATA_DT'].dt.date <= data_filtro[1])
-                            df_andamento = df_andamento[mask_a | df_andamento['DATA_DT'].isnull()]
 
                 qtd_conflitos = df_andamento['CONFLITO'].sum() if df_andamento is not None else 0
                 
@@ -1057,13 +1018,7 @@ if mostrar_uc_municipal: adicionar_camada_area(geo_uc_mun, "UC Municipal", mapa,
 # ==========================================
 dados_tabela_conflito = []
 
-if (mostrar_concluidas or mostrar_conflitantes or mostrar_heatmap or mostrar_todas_obras) and msg_obras == "OK":
-    
-    if mostrar_heatmap:
-        heat_data = []
-        if df_andamento is not None and not df_andamento.empty: heat_data.extend(df_andamento[['LAT_CLEAN', 'LON_CLEAN']].values.tolist())
-        if df_concluidas is not None and not df_concluidas.empty: heat_data.extend(df_concluidas[['LAT_CLEAN', 'LON_CLEAN']].values.tolist())
-        if heat_data: HeatMap(heat_data, radius=15, blur=10, name="🔥 Densidade de Obras").add_to(mapa)
+if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras) and msg_obras == "OK":
     
     if mostrar_todas_obras:
         cluster_todas = MarkerCluster(name="Todas as Obras (Geral)")
@@ -1157,28 +1112,6 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_heatmap or mostrar_tod
                 popup=folium.Popup(html_popup, max_width=350)
             ).add_to(fg_andamento)
         fg_andamento.add_to(mapa)
-
-# ==========================================
-# 🌩️ INTEGRAÇÃO DE RADARES EXTERNOS (STREET VIEW E CLIMA)
-# ==========================================
-if mostrar_streetview:
-    folium.TileLayer(
-        tiles='https://mt1.google.com/vt/lyrs=svv&x={x}&y={y}&z={z}',
-        attr='Google Maps Street View',
-        name='🛣️ Cobertura Street View',
-        overlay=True,
-        control=True,
-        opacity=0.8
-    ).add_to(mapa)
-
-if mostrar_clima:
-    url_chuva, url_nuvem = obter_radar_chuva_url()
-    if url_nuvem:
-        folium.TileLayer(tiles=url_nuvem, attr="RainViewer", name="☁️ Nuvens (Satélite Ao Vivo)", overlay=True, control=True, opacity=0.4, max_native_zoom=12, max_zoom=20).add_to(mapa)
-    if url_chuva:
-        folium.TileLayer(tiles=url_chuva, attr="RainViewer", name="🌧️ Chuvas Ao Vivo (Radar)", overlay=True, control=True, opacity=0.6, max_native_zoom=12, max_zoom=20).add_to(mapa)
-    if not url_chuva and not url_nuvem:
-        st.sidebar.warning("⚠️ Serviço de radar climático temporariamente indisponível na API central.")
 
 # ==========================================
 # FOCO AUTOMÁTICO RECEBIDO DO CRIAR SGO
@@ -1315,7 +1248,7 @@ with table_container:
         csv = df_tabela.to_csv(index=False).encode('utf-8-sig')
         st.download_button(label="📥 Baixar Relatório (CSV)", data=csv, file_name="conflitos.csv", mime="text/csv", type="primary")
 
-    if (mostrar_concluidas or mostrar_conflitantes or mostrar_heatmap or mostrar_todas_obras) and msg_obras == "OK":
+    if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras) and msg_obras == "OK":
         if df_invalidas is not None and not df_invalidas.empty:
             st.markdown("---")
             with st.expander(f"⚠️ Monitor de Qualidade de Dados ({len(df_invalidas)} Inconsistências na Planilha)"):
