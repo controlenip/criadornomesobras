@@ -1404,20 +1404,14 @@ with table_container:
         """, unsafe_allow_html=True)
 
         def render_kpi_card(col, css_class, title, value, subtitle):
-            col.markdown(
-                f"""
-                <div class="nip-kpi-card {css_class}">
-
-                    <div class="nip-kpi-title">{title}</div>
-
-                    <div class="nip-kpi-value">{value}</div>
-
-                    <div class="nip-kpi-sub">{subtitle}</div>
-
-                </div>
-                """,
-                unsafe_allow_html=True,
+            html_card = (
+                f'<div class="nip-kpi-card {css_class}">'
+                f'<div class="nip-kpi-title">{title}</div>'
+                f'<div class="nip-kpi-value">{value}</div>'
+                f'<div class="nip-kpi-sub">{subtitle}</div>'
+                f'</div>'
             )
+            col.markdown(html_card, unsafe_allow_html=True)
 
         k1, k2, k3, k4 = st.columns(4)
         render_kpi_card(k1, 'nip-kpi-red', '🚨 Conflitos encontrados', f"{total_conflitos:,}".replace(',', '.'), 'Obras novas dentro de 50 m de uma concluída.')
