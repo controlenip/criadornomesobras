@@ -1076,11 +1076,23 @@ if (mostrar_concluidas or mostrar_conflitantes or mostrar_todas_obras or bool(st
                 folium.CircleMarker(location=[lat, lon], radius=5, color='black', weight=1, fill=True, fillColor='#1f77b4', fillOpacity=0.9, tooltip=f"Concluída: {html.escape(str(row.get('PROTOCOLO', 'S/N')))}", popup=folium.Popup(html_popup, max_width=350)).add_to(cluster_todas)
         
         if df_andamento is not None:
+            # Nesta camada genérica, a aparência é definida SOMENTE pelo STATUS LIST.
+            # A sinalização vermelha de conflito pertence exclusivamente à opção
+            # 'OBRAS CONFLITANTES (Raio 50m)' abaixo. Assim, marcar um STATUS LIST
+            # não ativa visualmente conflitos por conta própria.
+            cores_status_list = {
+                '0': '#cbd5e1',
+                'EM LEVANTAMENTO': '#22c55e',
+                'ANALISE DE LEVANTAMENTO': '#eab308',
+                'IMPRODUTIVO': '#f97316',
+                'CORRECAO DE LEVANTAMENTO': '#7c3aed',
+            }
             for _, row in df_andamento.iterrows():
                 lat, lon = row['LAT_CLEAN'], row['LON_CLEAN']
-                cor = 'red' if row['CONFLITO'] else '#2ca02c'
                 status_list_atual = str(row.get('STATUS_LIST_NORM', '')).strip() or 'SEM STATUS'
-                titulo = "🚨 CONFLITO!" if row['CONFLITO'] else f"🚧 {status_list_atual}"
+                status_norm_cor = remove_accents(status_list_atual).upper().strip()
+                cor = cores_status_list.get(status_norm_cor, '#2ca02c')
+                titulo = f"🚧 {status_list_atual}"
                 sv_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat},{lon}"
                 areas_especiais = verificar_areas_da_obra(lat, lon) 
                 rede_prox = calcular_rede_proxima(lat, lon)
