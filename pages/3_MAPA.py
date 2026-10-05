@@ -1203,15 +1203,30 @@ if foco_mapa_sgo and foco_mapa_sgo.get('conflitos'):
                 tooltip=f"Solicitação {obra_nova}",
                 popup=folium.Popup(popup_nova, max_width=320)
             ).add_to(fg_foco)
+            # CÍRCULO VISUAL FIXO DE 50 METROS EM TORNO DA SOLICITAÇÃO
+            # Mantido propositalmente com contraste alto para ficar visível também
+            # sobre a camada de satélite do Google.
             folium.Circle(
-                [lat_nova, lon_nova],
-                radius=float(foco_mapa_sgo.get('raio_m', 50.0)),
-                color='#f97316',
-                weight=2,
+                location=[lat_nova, lon_nova],
+                radius=50.0,
+                color='#ff0000',
+                weight=4,
+                opacity=1.0,
                 fill=True,
-                fill_color='#f97316',
-                fill_opacity=0.08,
-                tooltip='Raio de verificação: 50 m'
+                fill_color='#ff0000',
+                fill_opacity=0.12,
+                dash_array='10,6',
+                tooltip=f'Raio de verificação: 50 m — Solicitação {obra_nova}'
+            ).add_to(fg_foco)
+
+            # Rótulo discreto indicando o raio no mapa.
+            folium.Marker(
+                location=[lat_nova, lon_nova],
+                icon=folium.DivIcon(
+                    icon_size=(90, 20),
+                    icon_anchor=(-8, -16),
+                    html="<div style='background:rgba(255,255,255,.92);border:2px solid #ff0000;border-radius:12px;padding:2px 7px;color:#b91c1c;font-weight:800;font-size:11px;white-space:nowrap;'>RAIO 50 m</div>"
+                )
             ).add_to(fg_foco)
 
         chave_conc = (obra_conc, round(lat_conc, 7), round(lon_conc, 7))
