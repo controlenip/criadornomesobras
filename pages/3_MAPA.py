@@ -557,31 +557,108 @@ def carregar_base_obras_completa(file_mtime=None):
 
 @st.cache_data(show_spinner=False)
 def buscar_protocolo_na_base(protocolo, file_mtime=None):
+    """
+    Procura uma obra pelo número informado em todas as colunas usuais de identificação.
+    A pesquisa é independente das camadas/checkboxes visíveis no mapa.
+    Primeiro tenta correspondência EXATA e só depois correspondência parcial.
+    """
     termo = str(protocolo).strip().upper()
+    termo = re.sub(r'\.0$', '', termo)
     if not termo:
         return None
+
     d = carregar_base_obras_completa(file_mtime)
     if d.empty:
         return None
-    col_p = next((c for c in d.columns if 'PROTOCOLO' in str(c).upper() or str(c).upper() in ['NOTA', 'Nº DA NOTA', 'NUMERO DA NOTA']), None)
-    lat_col = next((c for c in d.columns if 'LATITUDE' in str(c).upper() or str(c).upper() == 'LAT'), None)
-    lon_col = next((c for c in d.columns if 'LONGITUDE' in str(c).upper() or str(c).upper() == 'LON'), None)
-    if not all([col_p, lat_col, lon_col]):
+
+    def norm_col(c):
+        return remove_accents(str(c)).upper().strip()
+
+    # Não escolher apenas a primeira coluna: algumas bases possuem PROTOCOLO,
+    # NOTA, NOTA SGO, ID SISCO etc. simultaneamente.
+    candidatos_exatos = {
+        'PROTOCOLO', 'NOTA', 'N DA NOTA', 'Nº DA NOTA', 'NUMERO DA NOTA',
+        'NUMERO NOTA', 'NOTA SGO', 'NOTA CCS', 'ID SISCO', 'ID DA NOTA',
+        'NUMERO DA SOLICITACAO', 'SOLICITACAO'
+    }
+    colunas_busca = []
+    for c in d.columns:
+        nc = norm_col(c)
+        if (
+            nc in candidatos_exatos
+            or 'PROTOCOLO' in nc
+            or nc.startswith('NOTA ')
+            or nc.endswith(' NOTA')
+            or 'NOTA SGO' in nc
+            or 'ID SISCO' in nc
+        ):
+            colunas_busca.append(c)
+
+    # Fallback para bases com nomenclatura inesperada.
+    if not colunas_busca:
+        colunas_busca = [c for c in d.columns if any(x in norm_col(c) for x in ['PROTOCOLO', 'NOTA', 'SOLICITACAO'])]
+
+    lat_col = next((c for c in d.columns if 'LATITUDE' in norm_col(c) or norm_col(c) == 'LAT'), None)
+    lon_col = next((c for c in d.columns if 'LONGITUDE' in norm_col(c) or norm_col(c) == 'LON'), None)
+    if not colunas_busca or not lat_col or not lon_col:
         return None
-    serie = d[col_p].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
-    achou = d[serie == termo]
+
+    def serie_normalizada(col):
+        return (
+            d[col].astype(str)
+            .str.replace(r'\.0$', '', regex=True)
+            .str.strip()
+            .str.upper()
+        )
+
+    # 1) igualdade exata em qualquer coluna de identificação.
+    mask_exata = pd.Series(False, index=d.index)
+    coluna_encontrada = None
+    for c in colunas_busca:
+        ser = serie_normalizada(c)
+        m = ser.eq(termo)
+        if m.any() and coluna_encontrada is None:
+            coluna_encontrada = c
+        mask_exata |= m
+
+    achou = d[mask_exata]
+
+    # 2) só usa busca parcial se não houver correspondência exata.
     if achou.empty:
-        achou = d[serie.str.contains(re.escape(termo), na=False)]
+        mask_parcial = pd.Series(False, index=d.index)
+        for c in colunas_busca:
+            ser = serie_normalizada(c)
+            m = ser.str.contains(re.escape(termo), na=False)
+            if m.any() and coluna_encontrada is None:
+                coluna_encontrada = c
+            mask_parcial |= m
+        achou = d[mask_parcial]
+
     if achou.empty:
         return None
+
     row = achou.iloc[0].copy()
     try:
         lat = float(str(row[lat_col]).replace(',', '.'))
         lon = float(str(row[lon_col]).replace(',', '.'))
     except Exception:
-        return {'encontrado': True, 'coordenada_valida': False, 'row': row.to_dict()}
-    valido = (lat != 0 and lon != 0 and LIMITE_COORD_LAT[0] <= lat <= LIMITE_COORD_LAT[1] and LIMITE_COORD_LON[0] <= lon <= LIMITE_COORD_LON[1])
-    return {'encontrado': True, 'coordenada_valida': valido, 'lat': lat, 'lon': lon, 'row': row.to_dict()}
+        return {
+            'encontrado': True, 'coordenada_valida': False,
+            'row': row.to_dict(), 'coluna_encontrada': coluna_encontrada,
+            'quantidade_resultados': int(len(achou))
+        }
+
+    valido = (
+        lat != 0 and lon != 0
+        and LIMITE_COORD_LAT[0] <= lat <= LIMITE_COORD_LAT[1]
+        and LIMITE_COORD_LON[0] <= lon <= LIMITE_COORD_LON[1]
+    )
+    return {
+        'encontrado': True, 'coordenada_valida': valido,
+        'lat': lat, 'lon': lon, 'row': row.to_dict(),
+        'coluna_encontrada': coluna_encontrada,
+        'quantidade_resultados': int(len(achou))
+    }
 
 @st.cache_data(show_spinner=False)
 def analisar_qualidade_base(file_mtime=None):
@@ -856,10 +933,15 @@ with st.sidebar:
             st.caption(f"Última sincronização: {us.get('quando')} | {us.get('processados', 0)}/{us.get('arquivos', 0)} processados | {us.get('falhas', 0)} falhas/ignorados | {us.get('duracao_s', 0)}s")
 
     with st.expander("🔎 2. Pesquisas Inteligentes", expanded=False):
-        tab_nome, tab_coord, tab_obra = st.tabs(["📝 Por Nome/ID", "📍 Por Coordenada", "🏗️ Por Protocolo"])
+        tab_nome, tab_coord, tab_obra = st.tabs(["📝 Nome/ID/Nota", "📍 Por Coordenada", "🏗️ Por Protocolo"])
         termo_pesquisa, busca_lat, busca_lon, protocolo_pesquisa = "", None, None, ""
         with tab_nome:
-            termo_pesquisa = st.text_input("Nome/Num. Poste ou Trafo:", placeholder="Ex: 554930...", key="busca_nome_rede").strip().upper()
+            termo_pesquisa = st.text_input(
+                "Nome, Nº de Poste/Trafo ou Nº da Nota:",
+                placeholder="Ex: 554930 ou 430163831",
+                key="busca_nome_rede"
+            ).strip().upper()
+            st.caption("Pesquisa simultaneamente a malha elétrica e a base de obras. Para número exato de nota/protocolo, a obra tem prioridade.")
         with tab_coord:
             c_lat, c_lon = st.columns(2)
             with c_lat: lat_input = st.text_input("Latitude:", placeholder="Ex: -5.532", key="busca_lat")
@@ -1308,6 +1390,25 @@ with kpi_container:
                 fig4.update_traces(hovertemplate='<b>%{y}</b><br>%{fullData.name}: %{x}<extra></extra>')
                 st.plotly_chart(fig4, use_container_width=True)
 
+# Pesquisa unificada do primeiro campo: antes de procurar na malha, também
+# tenta localizar o termo como NOTA/PROTOCOLO na base de obras.
+resultado_obra_busca_geral = None
+obra_geral_zoom_lat = obra_geral_zoom_lon = None
+if termo_pesquisa:
+    resultado_obra_busca_geral = buscar_protocolo_na_base(
+        termo_pesquisa, _mtime_seguro("BASE_LEVANTAMENTO_ATUALIZADA.xlsx")
+    )
+    if resultado_obra_busca_geral and resultado_obra_busca_geral.get('coordenada_valida'):
+        obra_geral_zoom_lat = float(resultado_obra_busca_geral['lat'])
+        obra_geral_zoom_lon = float(resultado_obra_busca_geral['lon'])
+        qtd = int(resultado_obra_busca_geral.get('quantidade_resultados', 1) or 1)
+        msg = f"🎯 Obra localizada pela nota/protocolo: {termo_pesquisa}"
+        if qtd > 1:
+            msg += f" ({qtd} registros compatíveis; exibindo o primeiro)"
+        st.sidebar.success(msg)
+    elif resultado_obra_busca_geral and not resultado_obra_busca_geral.get('coordenada_valida'):
+        st.sidebar.warning("⚠️ Nota/protocolo localizado, mas a obra não possui coordenada válida para posicionamento.")
+
 # Busca direta de protocolo/nota. É independente do motor de conflitos.
 resultado_protocolo = None
 protocolo_zoom_lat = protocolo_zoom_lon = None
@@ -1326,6 +1427,29 @@ if protocolo_pesquisa:
 # 4. CONSTRUÇÃO DO MAPA FOLIUM E SIMBOLOGIA
 # ==========================================
 mapa = folium.Map(location=[-5.2, -45.0], zoom_start=6, tiles=None, prefer_canvas=True)
+
+# Destaque de obra encontrada pelo campo unificado Nome/ID/Nota.
+if obra_geral_zoom_lat is not None and obra_geral_zoom_lon is not None:
+    row_busca_geral = (resultado_obra_busca_geral or {}).get('row', {})
+    nome_busca_geral = str(row_busca_geral.get('NOME', row_busca_geral.get('NOME DA OBRA', 'S/N')))
+    status_busca_geral = str(row_busca_geral.get('STATUS LIST', 'S/N'))
+    mun_busca_geral = str(row_busca_geral.get('MUNICIPIO', row_busca_geral.get('MUNICÍPIO', 'S/N')))
+    popup_busca_geral = f"""
+    <div style='min-width:260px;font-family:sans-serif;'>
+      <h4 style='margin:0 0 8px 0;color:#7c3aed;border-bottom:2px solid #7c3aed;padding-bottom:5px;'>🔎 OBRA LOCALIZADA</h4>
+      <b>NOTA/PROTOCOLO:</b> {html.escape(termo_pesquisa)}<br>
+      <b>NOME:</b> {html.escape(nome_busca_geral)}<br>
+      <b>STATUS LIST:</b> {html.escape(status_busca_geral)}<br>
+      <b>MUNICÍPIO:</b> {html.escape(mun_busca_geral)}<br>
+      <b>COORDENADAS:</b> {obra_geral_zoom_lat:.6f}, {obra_geral_zoom_lon:.6f}
+    </div>
+    """
+    folium.Marker(
+        [obra_geral_zoom_lat, obra_geral_zoom_lon],
+        tooltip=f"Obra localizada: {html.escape(termo_pesquisa)}",
+        popup=folium.Popup(popup_busca_geral, max_width=340),
+        icon=folium.Icon(color='purple', icon='search', prefix='fa')
+    ).add_to(mapa)
 
 if protocolo_zoom_lat is not None and protocolo_zoom_lon is not None:
     row_busca = (resultado_protocolo or {}).get('row', {})
@@ -1466,10 +1590,14 @@ if not df.empty:
             df_busca = df_mapa.loc[[nearest_idx]]
             df_mapa = df_mapa.drop(nearest_idx)
 
-    elif termo_pesquisa != "":
+    elif termo_pesquisa != "" and obra_geral_zoom_lat is None:
+        # Se o termo não foi localizado como nota/protocolo, mantém exatamente
+        # o comportamento anterior de pesquisa por nome/ID da malha elétrica.
         mask_nome = df_mapa['NOME'].astype(str).str.contains(termo_pesquisa, case=False, na=False)
         df_busca = df_mapa[mask_nome]
         df_mapa = df_mapa[~mask_nome]
+        if df_busca.empty:
+            st.sidebar.warning("⚠️ Nenhuma obra, poste, trafo ou elemento de rede encontrado para o termo informado.")
 
     dict_cores_render = {
         'REDE PRIMÁRIA': '#0000FF', 
@@ -2333,6 +2461,8 @@ if coords_foco_sgo:
     )
 elif zoom_lat is not None and zoom_lon is not None:
     mapa.fit_bounds([[zoom_lat - 0.001, zoom_lon - 0.001], [zoom_lat + 0.001, zoom_lon + 0.001]])
+elif obra_geral_zoom_lat is not None and obra_geral_zoom_lon is not None:
+    mapa.fit_bounds([[obra_geral_zoom_lat - 0.001, obra_geral_zoom_lon - 0.001], [obra_geral_zoom_lat + 0.001, obra_geral_zoom_lon + 0.001]])
 elif protocolo_zoom_lat is not None and protocolo_zoom_lon is not None:
     mapa.fit_bounds([[protocolo_zoom_lat - 0.001, protocolo_zoom_lon - 0.001], [protocolo_zoom_lat + 0.001, protocolo_zoom_lon + 0.001]])
 elif busca_lat is not None and busca_lon is not None:
