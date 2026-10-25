@@ -720,7 +720,25 @@ else:
             fase_formatada = "(LIGAÇÃO MONOFÁSICA)" if fase_sol.upper() == "MO" else "(LIGAÇÃO TRIFÁSICA)" if fase_sol.upper() == "TR" else "(LIGAÇÃO BIFÁSICA)" if fase_sol.upper() in ["BI", "BT", "B"] else f"(FASE {fase_sol})"
             desc_str = f"{val_sol_final}-{val_livre_final_desc}, CC-{val_cc_final} {fase_formatada}."
             
-            raw_name = f"{pref_especial}{pref_tipo_loop}-{pref_pi}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
+            # PI individual por solicitacao: nunca reutilizar o PI da primeira
+            # nota quando NOTAS ASSOCIADAS estiver desmarcada.
+            # Um PI selecionado manualmente continua sendo um override explicito.
+            if notas_associadas:
+                pref_pi_sol = pref_pi
+            elif man_pi:
+                pref_pi_sol = man_pi
+            else:
+                pi_bruto_sol = r_sol_notas.get('TIPO LIGAÇÃO', '')
+                if pd.isna(pi_bruto_sol) or not str(pi_bruto_sol).strip():
+                    pi_bruto_sol = r_sol_notas.get('TIPO NOTA', '')
+                pref_pi_sol = str(pi_bruto_sol).strip().upper()
+                if pref_pi_sol in ('NAN', 'NONE', 'NULL'):
+                    pref_pi_sol = ''
+                # PI nao localizado: nao atribuir UNR artificialmente.
+                if not pref_pi_sol:
+                    pref_pi_sol = 'SEM-PI'
+
+            raw_name = f"{pref_especial}{pref_tipo_loop}-{pref_pi_sol}-{pref_mun}-{pref_id}-{val_sol_final}-{val_livre_final_nome}"
             clean_name = raw_name.replace(".", "").replace("_", "").replace(" ", "-")
             nome_str = clean_name[:40].upper()
             
