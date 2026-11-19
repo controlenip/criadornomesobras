@@ -460,7 +460,7 @@ if solicitacoes and not df_notas.empty:
         parts = tipo_obra_raw.replace("-", " ").strip().split(" ")
         tipo_obra_sisco = " ".join(parts[:3]) if len(parts) > 3 else tipo_obra_raw
             
-        data_abertura_raw = str(r_notas.get('DATA ABERTURA', r_notas.get('DATA DA SOLICITAÇÃO', '')))
+        data_abertura_raw = str(r_notas.get('DATA DE CRIAÇÃO', r_notas.get('DATA ABERTURA', r_notas.get('DATA DA SOLICITAÇÃO', ''))))
         data_abertura = formatar_data(data_abertura_raw)
             
         status_sap = str(r_notas.get('STATUS SAP', ''))
