@@ -160,6 +160,9 @@ def montar_mapa_notas(df):
             "distribuidora": _texto(valor(row, ["DISTRIBUIDORA"])) or "EQTL MA",
             "regional": _texto(valor(row, ["REGIONAL"])).upper(),
             "data_solicitacao": _formatar_data(valor(row, [
+                # Nova base (aba NOTAS, coluna AA). Buscar pelo cabecalho e nao
+                # pela posicao da coluna, preservando os formatos anteriores.
+                "DATA DE CRIAÇÃO", "DATA DA CRIAÇÃO",
                 "DATA ABERTURA", "DATA DA SOLICITAÇÃO", "DATA DA SOLICITACAO"
             ])),
             "conta_contrato": _texto(valor(row, ["CONTA CONTRATO", "CONTA CONTRATO CCS"])),
